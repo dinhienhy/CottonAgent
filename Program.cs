@@ -12,7 +12,11 @@ using Microsoft.AspNetCore.Components.Server;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddRazorPages();
-builder.Services.AddServerSideBlazor();
+builder.Services.AddServerSideBlazor()
+    .AddHubOptions(options =>
+    {
+        options.MaximumReceiveMessageSize = 10 * 1024 * 1024; // 10MB
+    });
 builder.Services.AddHttpContextAccessor();
 
 // Add session

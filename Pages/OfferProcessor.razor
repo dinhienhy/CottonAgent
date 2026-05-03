@@ -37,6 +37,12 @@
                     <div class="mb-3">
                         <label class="form-label">Offer PDF File</label>
                         <InputFile class="form-control" OnChange="@OnOfferFileSelected" accept=".pdf" />
+                        @if (!string.IsNullOrEmpty(uploadModel.OfferFileName))
+                        {
+                            <div class="mt-2">
+                                <span class="badge bg-success">✓ @uploadModel.OfferFileName</span>
+                            </div>
+                        }
                     </div>
 
                     <div class="mb-3">
@@ -170,29 +176,71 @@
     private string? errorMessage;
     private int currentOfferId;
 
-    private void OnOfferFileSelected(InputFileChangeEventArgs e)
+    private async Task OnOfferFileSelected(InputFileChangeEventArgs e)
     {
-        var file = e.File;
-        if (file != null)
+        try
         {
-            uploadModel.OfferFileName = file.Name;
-            uploadModel.OfferPdfStream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+            var file = e.File;
+            if (file != null)
+            {
+                Console.WriteLine($"Offer file selected: {file.Name}, Size: {file.Size} bytes");
+                uploadModel.OfferFileName = file.Name;
+                
+                // Read file immediately to avoid stream disposal issues
+                using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+                using var memoryStream = new MemoryStream();
+                await stream.CopyToAsync(memoryStream);
+                memoryStream.Position = 0;
+                uploadModel.OfferPdfStream = memoryStream;
+                
+                Console.WriteLine($"Offer file loaded successfully: {memoryStream.Length} bytes");
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error loading offer file: {ex.Message}");
+            errorMessage = $"Error loading offer file: {ex.Message}";
         }
     }
 
-    private void OnHVIFilesSelected(InputFileChangeEventArgs e)
+    private async Task OnHVIFilesSelected(InputFileChangeEventArgs e)
     {
-        uploadModel.HVIFiles.Clear();
-        hviFileNames.Clear();
-
-        foreach (var file in e.GetMultipleFiles(20))
+        try
         {
-            hviFileNames.Add(file.Name);
-            uploadModel.HVIFiles.Add(new HVIFileDto
+            uploadModel.HVIFiles.Clear();
+            hviFileNames.Clear();
+
+            var files = e.GetMultipleFiles(20);
+            Console.WriteLine($"HVI files selected: {files.Count}");
+
+            foreach (var file in files)
             {
-                FileName = file.Name,
-                FileStream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024)
-            });
+                Console.WriteLine($"Loading HVI file: {file.Name}, Size: {file.Size} bytes");
+                hviFileNames.Add(file.Name);
+                
+                // Read file immediately
+                using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+                using var memoryStream = new MemoryStream();
+                await stream.CopyToAsync(memoryStream);
+                memoryStream.Position = 0;
+                
+                uploadModel.HVIFiles.Add(new HVIFileDto
+                {
+                    FileName = file.Name,
+                    FileStream = memoryStream
+                });
+                
+                Console.WriteLine($"HVI file loaded: {file.Name}, {memoryStream.Length} bytes");
+            }
+            
+            Console.WriteLine($"Total HVI files loaded: {uploadModel.HVIFiles.Count}");
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error loading HVI files: {ex.Message}");
+            errorMessage = $"Error loading HVI files: {ex.Message}";
         }
     }
 

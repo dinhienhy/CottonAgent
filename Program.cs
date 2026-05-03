@@ -4,11 +4,41 @@ using Microsoft.EntityFrameworkCore;
 using CBAS.Web.Data;
 using CBAS.Web.Services;
 using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Components.Server;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
+builder.Services.AddHttpContextAccessor();
+
+// Add session
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromHours(2);
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+});
+
+// Add authentication
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.LoginPath = "/Login";
+        options.LogoutPath = "/Logout";
+        options.ExpireTimeSpan = TimeSpan.FromHours(2);
+        options.AccessDeniedPath = "/Login";
+    });
+
+builder.Services.AddAuthorization();
+
+// Add AuthenticationStateProvider for Blazor
+builder.Services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
+builder.Services.AddCascadingAuthenticationState();
 
 var connectionString = GetConnectionString(builder.Configuration);
 
@@ -79,11 +109,15 @@ if (!app.Environment.IsDevelopment())
 }
 
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
-app.Urls.Add($"http://0.0.0.0:{port}");
+app.Urls.Add($"http://localhost:{port}");
 
 app.UseStaticFiles();
 
 app.UseRouting();
+
+app.UseSession();
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapBlazorHub();
 app.MapFallbackToPage("/_Host");

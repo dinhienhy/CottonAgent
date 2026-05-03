@@ -9,7 +9,15 @@
 
     <main>
         <div class="top-row px-4">
-            <a href="https://docs.microsoft.com/aspnet/" target="_blank">About</a>
+            <AuthorizeView>
+                <Authorized>
+                    <span class="me-3">Welcome, <strong>@context.User.Identity?.Name</strong></span>
+                    <a href="/Logout" class="btn btn-sm btn-outline-danger">Logout</a>
+                </Authorized>
+                <NotAuthorized>
+                    <a href="/Login" class="btn btn-sm btn-primary">Login</a>
+                </NotAuthorized>
+            </AuthorizeView>
         </div>
 
         <article class="content px-4">

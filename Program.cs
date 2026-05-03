@@ -19,19 +19,33 @@ static string GetConnectionString(IConfiguration configuration)
 {
     var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
     
+    Console.WriteLine($"DATABASE_URL exists: {!string.IsNullOrEmpty(databaseUrl)}");
+    
     if (!string.IsNullOrEmpty(databaseUrl))
     {
-        var match = Regex.Match(databaseUrl, @"postgres://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)");
+        Console.WriteLine($"DATABASE_URL: {databaseUrl.Substring(0, Math.Min(50, databaseUrl.Length))}...");
+        
+        var match = Regex.Match(databaseUrl, @"postgres(?:ql)?://([^:]+):([^@]+)@([^:/]+)(?::(\d+))?/([^?]+)");
         if (match.Success)
         {
             var user = match.Groups[1].Value;
             var password = match.Groups[2].Value;
             var host = match.Groups[3].Value;
-            var port = match.Groups[4].Value;
+            var port = match.Groups[4].Success ? match.Groups[4].Value : "5432";
             var database = match.Groups[5].Value;
             
-            return $"Host={host};Port={port};Database={database};Username={user};Password={password};SSL Mode=Require;Trust Server Certificate=true";
+            var connStr = $"Host={host};Port={port};Database={database};Username={user};Password={password};SSL Mode=Require;Trust Server Certificate=true";
+            Console.WriteLine($"Using Railway DATABASE_URL");
+            return connStr;
         }
+        else
+        {
+            Console.WriteLine("DATABASE_URL format not recognized, using default");
+        }
+    }
+    else
+    {
+        Console.WriteLine("DATABASE_URL not found, using default connection string");
     }
     
     return configuration.GetConnectionString("DefaultConnection") 

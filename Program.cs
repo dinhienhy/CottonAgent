@@ -109,7 +109,8 @@ if (!app.Environment.IsDevelopment())
 }
 
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
-app.Urls.Add($"http://localhost:{port}");
+var host = app.Environment.IsDevelopment() ? "localhost" : "0.0.0.0";
+app.Urls.Add($"http://{host}:{port}");
 
 app.UseStaticFiles();
 

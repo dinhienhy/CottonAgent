@@ -186,11 +186,13 @@
                 Console.WriteLine($"Offer file selected: {file.Name}, Size: {file.Size} bytes");
                 uploadModel.OfferFileName = file.Name;
                 
-                // Read file immediately to avoid stream disposal issues
-                using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
-                using var memoryStream = new MemoryStream();
+                // Read file to MemoryStream (don't use 'using' - we need to keep it alive)
+                var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+                var memoryStream = new MemoryStream();
                 await stream.CopyToAsync(memoryStream);
                 memoryStream.Position = 0;
+                stream.Dispose(); // Dispose the input stream only
+                
                 uploadModel.OfferPdfStream = memoryStream;
                 
                 Console.WriteLine($"Offer file loaded successfully: {memoryStream.Length} bytes");
@@ -219,11 +221,12 @@
                 Console.WriteLine($"Loading HVI file: {file.Name}, Size: {file.Size} bytes");
                 hviFileNames.Add(file.Name);
                 
-                // Read file immediately
-                using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
-                using var memoryStream = new MemoryStream();
+                // Read file to MemoryStream (don't use 'using' - we need to keep it alive)
+                var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+                var memoryStream = new MemoryStream();
                 await stream.CopyToAsync(memoryStream);
                 memoryStream.Position = 0;
+                stream.Dispose(); // Dispose the input stream only
                 
                 uploadModel.HVIFiles.Add(new HVIFileDto
                 {

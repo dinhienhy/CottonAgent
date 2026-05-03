@@ -16,6 +16,14 @@ builder.Services.AddServerSideBlazor()
     .AddHubOptions(options =>
     {
         options.MaximumReceiveMessageSize = 10 * 1024 * 1024; // 10MB
+        options.ClientTimeoutInterval = TimeSpan.FromMinutes(5); // Client timeout
+        options.HandshakeTimeout = TimeSpan.FromSeconds(30); // Handshake timeout
+    })
+    .AddCircuitOptions(options =>
+    {
+        options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(5);
+        options.DisconnectedCircuitMaxRetained = 100;
+        options.JSInteropDefaultCallTimeout = TimeSpan.FromMinutes(2);
     });
 builder.Services.AddHttpContextAccessor();
 

@@ -101,7 +101,15 @@ public class OfferProcessingService : IOfferProcessingService
                 foreach (var lot in lots)
                 {
                     lot.PriceCentsPerLb = CalculatePricePerLb(offer.ICEValue, lot.BasisPoints);
-                    Console.WriteLine($"Adding lot: {lot.LotCode}, Shipment: {lot.ShipmentDate?.Kind}");
+                    
+                    // Check if HVI exists for this lot
+                    var hviExists = await _context.HVIReports.AnyAsync(h => h.LotCode == lot.LotCode);
+                    if (!hviExists)
+                    {
+                        Console.WriteLine($"WARNING: No HVI report found for lot: {lot.LotCode}");
+                    }
+                    
+                    Console.WriteLine($"Adding lot: {lot.LotCode}, Shipment: {lot.ShipmentDate?.Kind}, HVI exists: {hviExists}");
                     _context.OfferLots.Add(lot);
                 }
                 

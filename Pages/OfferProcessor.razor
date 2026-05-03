@@ -1,0 +1,251 @@
+@page "/offer-processor"
+@using CBAS.Web.Services
+@using CBAS.Web.DTOs
+@using Microsoft.AspNetCore.Components.Forms
+@inject IOfferProcessingService OfferService
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Cotton Offer Processor</PageTitle>
+
+<div class="container-fluid mt-4">
+    <h2 class="mb-4">Hệ thống Xử lý Offer Bông</h2>
+
+    @if (!isProcessed)
+    {
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Upload Files</h5>
+            </div>
+            <div class="card-body">
+                <EditForm Model="@uploadModel" OnValidSubmit="@HandleUpload">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Supplier Name</label>
+                            <InputText class="form-control" @bind-Value="uploadModel.SupplierName" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">ICE Value</label>
+                            <InputNumber class="form-control" @bind-Value="uploadModel.ICEValue" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Commission (%)</label>
+                            <InputNumber class="form-control" @bind-Value="uploadModel.CommissionPercent" />
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Offer PDF File</label>
+                        <InputFile class="form-control" OnChange="@OnOfferFileSelected" accept=".pdf" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">HVI Report PDF Files (Multiple)</label>
+                        <InputFile class="form-control" OnChange="@OnHVIFilesSelected" accept=".pdf" multiple />
+                        @if (hviFileNames.Any())
+                        {
+                            <div class="mt-2">
+                                <small class="text-muted">Selected: @string.Join(", ", hviFileNames)</small>
+                            </div>
+                        }
+                    </div>
+
+                    <button type="submit" class="btn btn-success" disabled="@isProcessing">
+                        @if (isProcessing)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                            <text>Processing...</text>
+                        }
+                        else
+                        {
+                            <text>Process Offer</text>
+                        }
+                    </button>
+                </EditForm>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Processed Output</h5>
+                <div>
+                    <button class="btn btn-light btn-sm me-2" @onclick="ExportToExcel">
+                        <i class="bi bi-file-earmark-excel"></i> Export Excel
+                    </button>
+                    <button class="btn btn-secondary btn-sm" @onclick="ResetForm">
+                        <i class="bi bi-arrow-clockwise"></i> New Offer
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                @if (outputGroups != null && outputGroups.Any())
+                {
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-hover table-sm">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>STT</th>
+                                    <th>Origin</th>
+                                    <th>Crop Year</th>
+                                    <th>Số lượng</th>
+                                    <th>Loại bông</th>
+                                    <th>Chỉ tiêu đặc biệt</th>
+                                    <th>Màu sắc</th>
+                                    <th>Tạp lá</th>
+                                    <th>Chiều dài</th>
+                                    <th>Micronaire</th>
+                                    <th>Cường lực Min</th>
+                                    <th>Basis</th>
+                                    <th>Shipment Date</th>
+                                    <th>Giá (c/kg)</th>
+                                    <th>Giá có Commission</th>
+                                    <th>Giá net</th>
+                                    <th>Ghi chú</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var group in outputGroups)
+                                {
+                                    <tr class="table-info">
+                                        <td colspan="17" class="fw-bold">@group.GroupTitle</td>
+                                    </tr>
+                                    @foreach (var row in group.Rows)
+                                    {
+                                        <tr>
+                                            <td>@row.STT</td>
+                                            <td>@row.Origin</td>
+                                            <td>@row.CropYear</td>
+                                            <td>@row.Quantity.ToString("N2")</td>
+                                            <td>@row.Type</td>
+                                            <td>@row.SpecialSpec</td>
+                                            <td>@row.Color</td>
+                                            <td>@(row.Leaf?.ToString("N2"))</td>
+                                            <td>@(row.Length?.ToString("N2"))</td>
+                                            <td>@(row.Micronaire?.ToString("N2"))</td>
+                                            <td>@(row.StrengthMin?.ToString("N2"))</td>
+                                            <td>@row.Basis.ToString("N2")</td>
+                                            <td>@(row.ShipmentDate?.ToString("dd/MM/yyyy"))</td>
+                                            <td>@row.PriceCentsPerKg.ToString("N4")</td>
+                                            <td>@row.PriceWithCommission.ToString("N4")</td>
+                                            <td>@row.NetPrice.ToString("N4")</td>
+                                            <td>@row.Notes</td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="alert alert-warning">No data to display</div>
+                }
+            </div>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger mt-3" role="alert">
+            @errorMessage
+        </div>
+    }
+</div>
+
+@code {
+    private OfferUploadDto uploadModel = new() 
+    { 
+        SupplierName = "Toyoshima",
+        ICEValue = 84.19m,
+        CommissionPercent = 2.00m,
+        OfferDate = DateTime.Today
+    };
+
+    private List<string> hviFileNames = new();
+    private List<OutputGroupDto>? outputGroups;
+    private bool isProcessing = false;
+    private bool isProcessed = false;
+    private string? errorMessage;
+    private int currentOfferId;
+
+    private void OnOfferFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file != null)
+        {
+            uploadModel.OfferFileName = file.Name;
+            uploadModel.OfferPdfStream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+        }
+    }
+
+    private void OnHVIFilesSelected(InputFileChangeEventArgs e)
+    {
+        uploadModel.HVIFiles.Clear();
+        hviFileNames.Clear();
+
+        foreach (var file in e.GetMultipleFiles(20))
+        {
+            hviFileNames.Add(file.Name);
+            uploadModel.HVIFiles.Add(new HVIFileDto
+            {
+                FileName = file.Name,
+                FileStream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024)
+            });
+        }
+    }
+
+    private async Task HandleUpload()
+    {
+        try
+        {
+            isProcessing = true;
+            errorMessage = null;
+            StateHasChanged();
+
+            currentOfferId = await OfferService.ProcessOfferAsync(uploadModel);
+            outputGroups = await OfferService.GetProcessedOutputAsync(currentOfferId);
+
+            isProcessed = true;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error processing offer: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ExportToExcel()
+    {
+        try
+        {
+            var excelBytes = await OfferService.ExportToExcelAsync(currentOfferId);
+            var fileName = $"CottonOffer_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+            
+            await JSRuntime.InvokeVoidAsync("downloadFile", fileName, Convert.ToBase64String(excelBytes));
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error exporting to Excel: {ex.Message}";
+        }
+    }
+
+    private void ResetForm()
+    {
+        isProcessed = false;
+        uploadModel = new() 
+        { 
+            SupplierName = "Toyoshima",
+            ICEValue = 84.19m,
+            CommissionPercent = 2.00m,
+            OfferDate = DateTime.Today
+        };
+        hviFileNames.Clear();
+        outputGroups = null;
+        errorMessage = null;
+    }
+}

@@ -200,18 +200,46 @@
     {
         try
         {
+            // Validation
+            if (uploadModel.OfferPdfStream == null)
+            {
+                errorMessage = "Please select an Offer PDF file";
+                return;
+            }
+
+            if (!uploadModel.HVIFiles.Any())
+            {
+                errorMessage = "Please select at least one HVI Report PDF file";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(uploadModel.SupplierName))
+            {
+                errorMessage = "Please enter Supplier Name";
+                return;
+            }
+
+            Console.WriteLine($"Starting processing... Supplier: {uploadModel.SupplierName}, ICE: {uploadModel.ICEValue}");
+            
             isProcessing = true;
             errorMessage = null;
             StateHasChanged();
 
+            Console.WriteLine("Calling OfferService.ProcessOfferAsync...");
             currentOfferId = await OfferService.ProcessOfferAsync(uploadModel);
+            Console.WriteLine($"Offer processed. OfferId: {currentOfferId}");
+
+            Console.WriteLine("Getting processed output...");
             outputGroups = await OfferService.GetProcessedOutputAsync(currentOfferId);
+            Console.WriteLine($"Output groups retrieved: {outputGroups?.Count ?? 0}");
 
             isProcessed = true;
+            Console.WriteLine("Processing complete!");
         }
         catch (Exception ex)
         {
-            errorMessage = $"Error processing offer: {ex.Message}";
+            Console.Error.WriteLine($"Error processing offer: {ex}");
+            errorMessage = $"Error processing offer: {ex.Message}\n\nStack trace: {ex.StackTrace}";
         }
         finally
         {

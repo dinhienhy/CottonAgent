@@ -1,0 +1,39 @@
+# ====================================
+# CBAS - Heroku Deployment Commands
+# ====================================
+# Copy từng lệnh và paste vào Terminal
+
+# Bước 1: Login Heroku
+heroku login
+
+# Bước 2: Tạo app (chọn 1 trong 2)
+# Option A: Tên tự động
+heroku create
+
+# Option B: Tên tùy chỉnh
+heroku create cotton-broker-system
+
+# Bước 3: Thêm PostgreSQL (thay YOUR_APP_NAME bằng tên app từ bước 2)
+heroku addons:create heroku-postgresql:mini -a YOUR_APP_NAME
+
+# Bước 4: Set stack to container
+heroku stack:set container -a YOUR_APP_NAME
+
+# Bước 5: Set environment
+heroku config:set ASPNETCORE_ENVIRONMENT=Production -a YOUR_APP_NAME
+
+# Bước 6: Deploy code
+git push heroku master
+
+# Bước 7: Xem logs (nếu cần)
+heroku logs --tail -a YOUR_APP_NAME
+
+# Bước 8: Mở app
+heroku open -a YOUR_APP_NAME
+
+# ====================================
+# Login Info sau khi deploy:
+# Username: admin
+# Password: admin123
+# ⚠️ ĐỔI PASSWORD NGAY!
+# ====================================

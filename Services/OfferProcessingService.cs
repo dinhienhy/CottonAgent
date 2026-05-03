@@ -51,6 +51,44 @@ public class OfferProcessingService : IOfferProcessingService
             throw new Exception($"Failed to save offer: {ex.InnerException?.Message ?? ex.Message}", ex);
         }
 
+        // STEP 1: Parse HVI PDFs FIRST (to create HVIReports that OfferLots will reference)
+        Console.WriteLine($"Parsing {uploadDto.HVIFiles.Count} HVI PDF files...");
+        foreach (var hviFile in uploadDto.HVIFiles)
+        {
+            try
+            {
+                hviFile.FileStream.Position = 0;
+                Console.WriteLine($"Parsing HVI file: {hviFile.FileName}");
+                var hviReport = await _pdfParser.ParseHVIPdfAsync(hviFile.FileStream, hviFile.FileName);
+                
+                if (hviReport != null)
+                {
+                    var existingHvi = await _context.HVIReports
+                        .FirstOrDefaultAsync(h => h.LotCode == hviReport.LotCode);
+                    
+                    if (existingHvi == null)
+                    {
+                        Console.WriteLine($"Adding HVI report for lot: {hviReport.LotCode}");
+                        _context.HVIReports.Add(hviReport);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"HVI report already exists for lot: {hviReport.LotCode}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Error parsing HVI file {hviFile.FileName}: {ex.Message}");
+                throw new Exception($"Failed to parse HVI file {hviFile.FileName}: {ex.Message}", ex);
+            }
+        }
+
+        Console.WriteLine("Saving HVI reports to database...");
+        await _context.SaveChangesAsync();
+        Console.WriteLine("HVI reports saved successfully");
+
+        // STEP 2: Parse Offer PDF (now OfferLots can reference existing HVIReports)
         if (uploadDto.OfferPdfStream != null)
         {
             try
@@ -78,25 +116,6 @@ public class OfferProcessingService : IOfferProcessingService
                 throw new Exception($"Failed to process offer lots: {ex.InnerException?.Message ?? ex.Message}", ex);
             }
         }
-
-        foreach (var hviFile in uploadDto.HVIFiles)
-        {
-            hviFile.FileStream.Position = 0;
-            var hviReport = await _pdfParser.ParseHVIPdfAsync(hviFile.FileStream, hviFile.FileName);
-            
-            if (hviReport != null)
-            {
-                var existingHvi = await _context.HVIReports
-                    .FirstOrDefaultAsync(h => h.LotCode == hviReport.LotCode);
-                
-                if (existingHvi == null)
-                {
-                    _context.HVIReports.Add(hviReport);
-                }
-            }
-        }
-
-        await _context.SaveChangesAsync();
 
         await GenerateProcessedOutputsAsync(offer.OfferId);
 

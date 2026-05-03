@@ -23,10 +23,12 @@ public class OfferProcessingService : IOfferProcessingService
 
     public async Task<int> ProcessOfferAsync(OfferUploadDto uploadDto)
     {
+        Console.WriteLine($"Creating offer: Supplier={uploadDto.SupplierName}, ICE={uploadDto.ICEValue}, Date={uploadDto.OfferDate}");
+        
         var offer = new Offer
         {
             OfferDate = uploadDto.OfferDate,
-            SupplierName = uploadDto.SupplierName,
+            SupplierName = uploadDto.SupplierName ?? "Unknown",
             FileName = uploadDto.OfferFileName ?? "Unknown",
             ICEValue = uploadDto.ICEValue,
             CommissionPercent = uploadDto.CommissionPercent,
@@ -34,7 +36,20 @@ public class OfferProcessingService : IOfferProcessingService
         };
 
         _context.Offers.Add(offer);
-        await _context.SaveChangesAsync();
+        
+        try
+        {
+            Console.WriteLine("Saving offer to database...");
+            await _context.SaveChangesAsync();
+            Console.WriteLine($"Offer saved successfully. OfferId: {offer.OfferId}");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error saving offer: {ex.Message}");
+            Console.Error.WriteLine($"Inner exception: {ex.InnerException?.Message}");
+            Console.Error.WriteLine($"Stack trace: {ex.StackTrace}");
+            throw new Exception($"Failed to save offer: {ex.InnerException?.Message ?? ex.Message}", ex);
+        }
 
         if (uploadDto.OfferPdfStream != null)
         {

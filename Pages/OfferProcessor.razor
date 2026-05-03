@@ -166,7 +166,7 @@
         SupplierName = "Toyoshima",
         ICEValue = 84.19m,
         CommissionPercent = 2.00m,
-        OfferDate = DateTime.Today
+        OfferDate = DateTime.UtcNow.Date
     };
 
     private List<string> hviFileNames = new();
@@ -319,7 +319,7 @@
             SupplierName = "Toyoshima",
             ICEValue = 84.19m,
             CommissionPercent = 2.00m,
-            OfferDate = DateTime.Today
+            OfferDate = DateTime.UtcNow.Date
         };
         hviFileNames.Clear();
         outputGroups = null;

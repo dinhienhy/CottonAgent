@@ -53,16 +53,30 @@ public class OfferProcessingService : IOfferProcessingService
 
         if (uploadDto.OfferPdfStream != null)
         {
-            uploadDto.OfferPdfStream.Position = 0;
-            var lots = await _pdfParser.ParseOfferPdfAsync(uploadDto.OfferPdfStream, offer.OfferId);
-            
-            foreach (var lot in lots)
+            try
             {
-                lot.PriceCentsPerLb = CalculatePricePerLb(offer.ICEValue, lot.BasisPoints);
-                _context.OfferLots.Add(lot);
+                uploadDto.OfferPdfStream.Position = 0;
+                Console.WriteLine("Parsing Offer PDF...");
+                var lots = await _pdfParser.ParseOfferPdfAsync(uploadDto.OfferPdfStream, offer.OfferId);
+                Console.WriteLine($"Parsed {lots.Count} lots from PDF");
+                
+                foreach (var lot in lots)
+                {
+                    lot.PriceCentsPerLb = CalculatePricePerLb(offer.ICEValue, lot.BasisPoints);
+                    Console.WriteLine($"Adding lot: {lot.LotCode}, Shipment: {lot.ShipmentDate?.Kind}");
+                    _context.OfferLots.Add(lot);
+                }
+                
+                Console.WriteLine("Saving lots to database...");
+                await _context.SaveChangesAsync();
+                Console.WriteLine("Lots saved successfully");
             }
-            
-            await _context.SaveChangesAsync();
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Error parsing/saving lots: {ex.Message}");
+                Console.Error.WriteLine($"Inner exception: {ex.InnerException?.Message}");
+                throw new Exception($"Failed to process offer lots: {ex.InnerException?.Message ?? ex.Message}", ex);
+            }
         }
 
         foreach (var hviFile in uploadDto.HVIFiles)

@@ -18,21 +18,13 @@ RUN dotnet publish "CBAS.Web.csproj" -c Release -o /app/publish /p:UseAppHost=fa
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
 
-# Install PostgreSQL client + Tesseract OCR with English language data
+# Install PostgreSQL client + Tesseract OCR CLI with English language data
 RUN apt-get update && apt-get install -y \
     postgresql-client \
     tesseract-ocr \
     tesseract-ocr-eng \
-    libtesseract-dev \
-    libleptonica-dev \
     && rm -rf /var/lib/apt/lists/* \
-    && echo "=== Tesseract version ===" && tesseract --version \
-    && echo "=== tessdata location ===" && find /usr/share -name "eng.traineddata" 2>/dev/null \
-    && echo "=== native libs ===" && ldconfig -p | grep -E "tesseract|lept"
-
-# Set TESSDATA_PREFIX to the directory containing eng.traineddata
-# Debian Bookworm: /usr/share/tesseract-ocr/5/tessdata
-ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
+    && tesseract --version
 
 COPY --from=publish /app/publish .
 

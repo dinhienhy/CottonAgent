@@ -1,28 +1,28 @@
 using CBAS.Web.DTOs;
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
-using Tesseract;
 using UglyToad.PdfPig;
 
 namespace CBAS.Web.Services;
 
 public class TesseractOcrService : IOcrService
 {
-    private readonly string? _tessDataPath;
+    private readonly bool _tesseractAvailable;
     private readonly ILogger<TesseractOcrService> _logger;
 
-    public bool IsAvailable => _tessDataPath != null;
+    public bool IsAvailable => _tesseractAvailable;
 
     public TesseractOcrService(ILogger<TesseractOcrService> logger)
     {
         _logger = logger;
-        _tessDataPath = FindTessDataPath();
+        _tesseractAvailable = CheckTesseractCli();
 
-        if (_tessDataPath != null)
-            _logger.LogInformation("Tesseract OCR ready. tessdata: {Path}", _tessDataPath);
+        if (_tesseractAvailable)
+            _logger.LogInformation("Tesseract OCR ready (CLI mode)");
         else
-            _logger.LogWarning("Tesseract OCR not available - tessdata not found. Manual input only.");
+            _logger.LogWarning("Tesseract OCR not available - 'tesseract' command not found. Manual input only.");
     }
 
     public async Task<OcrResult> ProcessHVIPdfAsync(Stream pdfStream, string fileName)
@@ -32,145 +32,155 @@ public class TesseractOcrService : IOcrService
             return new OcrResult
             {
                 Success = false,
-                ErrorMessage = "OCR không khả dụng (tessdata chưa cài đặt)"
+                ErrorMessage = "OCR không khả dụng (tesseract chưa cài đặt)"
             };
         }
 
-        return await Task.Run(() =>
+        try
         {
-            try
+            // Step 1: Extract images from PDF using PdfPig
+            var imageFiles = await ExtractImagesToTempFiles(pdfStream);
+
+            if (imageFiles.Count == 0)
             {
-                // Step 1: Extract images from PDF using PdfPig
-                var imageBytes = ExtractImagesFromPdf(pdfStream);
-
-                if (imageBytes.Count == 0)
-                {
-                    return new OcrResult
-                    {
-                        Success = false,
-                        ErrorMessage = "Không tìm thấy hình ảnh trong PDF"
-                    };
-                }
-
-                // Step 2: Run Tesseract OCR on each image
-                var allText = new StringBuilder();
-                float totalConfidence = 0;
-                int pageCount = 0;
-
-                _logger.LogInformation("Initializing Tesseract engine with tessdata path: {Path}", _tessDataPath);
-                TesseractEngine engine;
-                try
-                {
-                    engine = new TesseractEngine(_tessDataPath!, "eng", EngineMode.Default);
-                    engine.SetVariable("preserve_interword_spaces", "1");
-                }
-                catch (Exception initEx)
-                {
-                    var initInner = initEx.InnerException?.Message ?? initEx.Message;
-                    _logger.LogError(initEx, "Tesseract engine init failed: {Msg}", initInner);
-                    return new OcrResult
-                    {
-                        Success = false,
-                        ErrorMessage = $"Tesseract engine không khởi tạo được: {initInner}"
-                    };
-                }
-
-                foreach (var imgBytes in imageBytes)
-                {
-                    try
-                    {
-                        using var pix = Pix.LoadFromMemory(imgBytes);
-                        using var page = engine.Process(pix, PageSegMode.Auto);
-
-                        var text = page.GetText();
-                        var confidence = page.GetMeanConfidence();
-
-                        allText.AppendLine(text);
-                        totalConfidence += confidence;
-                        pageCount++;
-
-                        _logger.LogInformation("OCR page {Page}: {Chars} chars, confidence {Conf:P0}",
-                            pageCount, text.Length, confidence);
-                    }
-                    catch (Exception ex)
-                    {
-                        var inner = ex.InnerException?.Message ?? ex.Message;
-                        _logger.LogWarning("OCR failed on image ({Size} bytes): {Error} | Inner: {Inner}",
-                            imgBytes.Length, ex.Message, inner);
-                    }
-                }
-
-                if (pageCount == 0)
-                {
-                    return new OcrResult
-                    {
-                        Success = false,
-                        ErrorMessage = "OCR không đọc được ảnh nào"
-                    };
-                }
-
-                engine.Dispose();
-
-                var rawText = allText.ToString();
-                var avgConfidence = pageCount > 0 ? totalConfidence / pageCount : 0;
-
-                // Step 3: Parse HVI fields from OCR text
-                var result = ParseHVIFromOcrText(rawText);
-                result.Success = true;
-                result.Confidence = avgConfidence;
-                result.RawText = rawText;
-
-                _logger.LogInformation("OCR done for {File}: confidence={Conf:P0}, mic={Mic}, len={Len}, str={Str}",
-                    fileName, avgConfidence, result.Micronaire, result.Length, result.StrengthGPT);
-
-                return result;
-            }
-            catch (Exception ex)
-            {
-                var innerMsg = ex.InnerException?.Message ?? ex.Message;
-                _logger.LogError(ex, "OCR error for {File}: {Inner}", fileName, innerMsg);
                 return new OcrResult
                 {
                     Success = false,
-                    ErrorMessage = $"Lỗi OCR: {innerMsg}"
+                    ErrorMessage = "Không tìm thấy hình ảnh trong PDF"
                 };
             }
-        });
+
+            // Step 2: Run tesseract CLI on each image
+            var allText = new StringBuilder();
+            int pageCount = 0;
+
+            foreach (var imgFile in imageFiles)
+            {
+                try
+                {
+                    var text = await RunTesseractCli(imgFile);
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        allText.AppendLine(text);
+                        pageCount++;
+                        _logger.LogInformation("OCR page {Page}: {Chars} chars from {File}",
+                            pageCount, text.Length, Path.GetFileName(imgFile));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning("OCR failed on image {File}: {Error}", imgFile, ex.Message);
+                }
+                finally
+                {
+                    try { File.Delete(imgFile); } catch { }
+                }
+            }
+
+            if (pageCount == 0)
+            {
+                return new OcrResult
+                {
+                    Success = false,
+                    ErrorMessage = "OCR không đọc được ảnh nào"
+                };
+            }
+
+            var rawText = allText.ToString();
+
+            // Step 3: Parse HVI fields from OCR text
+            var result = ParseHVIFromOcrText(rawText);
+            result.Success = true;
+            result.Confidence = 0.5f; // CLI doesn't provide confidence; default 50%
+            result.RawText = rawText;
+
+            _logger.LogInformation("OCR done for {File}: pages={Pages}, mic={Mic}, len={Len}, str={Str}",
+                fileName, pageCount, result.Micronaire, result.Length, result.StrengthGPT);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "OCR error for {File}", fileName);
+            return new OcrResult
+            {
+                Success = false,
+                ErrorMessage = $"Lỗi OCR: {ex.Message}"
+            };
+        }
     }
 
-    private List<byte[]> ExtractImagesFromPdf(Stream pdfStream)
+    private async Task<string> RunTesseractCli(string imageFile)
     {
-        var images = new List<byte[]>();
+        using var process = new Process();
+        process.StartInfo = new ProcessStartInfo
+        {
+            FileName = "tesseract",
+            Arguments = $"\"{imageFile}\" stdout -l eng --psm 3",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        process.Start();
+        var output = await process.StandardOutput.ReadToEndAsync();
+        var error = await process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+
+        if (process.ExitCode != 0)
+        {
+            _logger.LogWarning("tesseract exit code {Code}: {Err}", process.ExitCode, error);
+        }
+
+        return output;
+    }
+
+    private async Task<List<string>> ExtractImagesToTempFiles(Stream pdfStream)
+    {
+        var files = new List<string>();
         try
         {
             pdfStream.Position = 0;
             var pdfBytes = new byte[pdfStream.Length];
-            pdfStream.Read(pdfBytes, 0, pdfBytes.Length);
+            await pdfStream.ReadAsync(pdfBytes, 0, pdfBytes.Length);
 
             using var document = PdfDocument.Open(pdfBytes);
+            int idx = 0;
             foreach (var page in document.GetPages())
             {
                 foreach (var image in page.GetImages())
                 {
                     try
                     {
+                        byte[]? imgBytes = null;
+                        string ext = "png";
+
                         // TryGetPng decodes the PDF-internal format to standard PNG
                         if (image.TryGetPng(out var pngBytes) && pngBytes.Length > 1000)
                         {
-                            images.Add(pngBytes);
-                            _logger.LogInformation("Extracted PNG image: {Size} bytes, {W}x{H}",
-                                pngBytes.Length, image.WidthInSamples, image.HeightInSamples);
+                            imgBytes = pngBytes;
                         }
                         else
                         {
-                            // Fallback: try raw bytes (works for embedded JPEG)
-                            var rawBytes = image.RawBytes.ToArray();
-                            if (rawBytes.Length > 1000)
+                            // Fallback: raw bytes (may be JPEG)
+                            var raw = image.RawBytes.ToArray();
+                            if (raw.Length > 1000)
                             {
-                                images.Add(rawBytes);
-                                _logger.LogInformation("Extracted raw image: {Size} bytes, {W}x{H}",
-                                    rawBytes.Length, image.WidthInSamples, image.HeightInSamples);
+                                imgBytes = raw;
+                                // Detect JPEG header
+                                if (raw.Length > 2 && raw[0] == 0xFF && raw[1] == 0xD8)
+                                    ext = "jpg";
                             }
+                        }
+
+                        if (imgBytes != null)
+                        {
+                            var tempFile = Path.Combine(Path.GetTempPath(), $"ocr_{idx++}.{ext}");
+                            await File.WriteAllBytesAsync(tempFile, imgBytes);
+                            files.Add(tempFile);
+                            _logger.LogInformation("Saved temp image: {File} ({Size} bytes, {W}x{H})",
+                                tempFile, imgBytes.Length, image.WidthInSamples, image.HeightInSamples);
                         }
                     }
                     catch (Exception ex)
@@ -185,7 +195,33 @@ public class TesseractOcrService : IOcrService
             _logger.LogError(ex, "Failed to extract images from PDF");
         }
 
-        return images;
+        return files;
+    }
+
+    private bool CheckTesseractCli()
+    {
+        try
+        {
+            using var process = new Process();
+            process.StartInfo = new ProcessStartInfo
+            {
+                FileName = "tesseract",
+                Arguments = "--version",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            process.Start();
+            var output = process.StandardError.ReadToEnd() + process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+            _logger.LogInformation("Tesseract CLI found: {Version}", output.Split('\n').FirstOrDefault()?.Trim());
+            return process.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private OcrResult ParseHVIFromOcrText(string text)

@@ -1,10 +1,10 @@
 # Cotton Broker Automation System (CBAS)
 
-Hệ thống Tự động Xử lý Offer Bông - Version 1.3
+Hệ thống Tự động Xử lý Offer Bông - Version 1.4
 
 ## Tổng quan
 
-CBAS là hệ thống web tự động hóa quy trình nhận Offer từ shipper (Toyoshima và các supplier khác) và tạo ra Output chuẩn để chào nhà máy Việt Nam.
+CBAS là hệ thống web tự động hóa quy trình nhận Offer từ nhiều shipper (Toyoshima, Olam, Brighann) và tạo ra Output chuẩn để chào nhà máy Việt Nam.
 
 **Live**: [cottonagent-production-92e0.up.railway.app](https://cottonagent-production-92e0.up.railway.app)
 
@@ -93,6 +93,9 @@ Truy cập: https://localhost:5001
 
 ## Công thức tính giá
 
+Hệ thống hỗ trợ 2 loại giá:
+
+### 1. On-Call (Basis + ICE)
 Basis trong Offer là **cents** (không phải points). Ví dụ: `11.00` = 11.00 c/lb.
 
 ```
@@ -101,12 +104,22 @@ Giá (c/kg) = Outright (c/lb) × 2.20462
 Giá có Commission = Giá (c/kg) - Commission
 ```
 
-**Ví dụ** (ME066M6):
+**Ví dụ** (ME066M6 - Toyoshima):
 ```
 Outright = 84.19 + 11.00 = 95.19 c/lb
 Giá (c/kg) = 95.19 × 2.20462 = 209.86 c/kg
 Giá net = 209.86 - 2.00 = 207.86 c/kg
 ```
+
+### 2. Fixed Price (OutrightPrice)
+Khi shipper báo giá cố định (ví dụ: Olam afloat, Brighann CIF):
+
+```
+Giá (c/kg) = OutrightPrice (c/lb) × 2.20462
+Giá có Commission = Giá (c/kg) - Commission
+```
+
+**Ưu tiên**: Nếu `OutrightPrice > 0` → dùng OutrightPrice. Ngược lại → dùng ICE + BasisCents.
 
 ## Quản lý Shipper / Lot (Phase 2A)
 
@@ -118,15 +131,17 @@ Giá net = 209.86 - 2.00 = 207.86 c/kg
 - Xem lịch sử tất cả offers
 - Filter theo shipper, ngày
 
-### Lots (`/lots`) — Quản lý Lot nâng cao (v1.3)
-- **23 cột đầy đủ**: Lot Code, Shipper, Origin, CropYear, Type, Spec, Shipment, QTY, Color, Leaf, Length, Mic, Str, Basis (points), c/kg, +Comm, Net, Status, HVI, Action
+### Lots (`/lots`) — Quản lý Lot nâng cao (v1.4)
+- **20 cột**: Lot Code, Shipper, Origin, CropYear, Type/Spec, Shipment/ETA, QTY Orig, QTY Avail, Mic, Len, GPT, Basis, Giá c/kg, +Comm, Net, Status, HVI, Action
 - **ICE + Commission** inputs ở góc trên — thay đổi → giá realtime refresh
 - **Multi-select** + nút "Tạo Output Chào Hàng" → export Excel (nhóm theo Shipment Date)
 - **HVI detail modal**: click "HVI ✓" → xem/chỉnh Mic, Length, Str, Uniformity, Color, Leaf
+- **Xóa lot**: nút "Xóa" trong cột Action
 - Filter: shipper, origin, status, lot code, **shipment month**
 - Summary cards: Available / Reserved / Sold / Tổng QTY
 - Thay đổi status: Reserve, Sold, Reopen
-- Auto-sync: khi upload Offer mới, tự tạo/update Lot + Basis + Shipment
+- Auto-sync: khi upload Offer mới, tự tạo/update Lot + Basis + OutrightPrice + Shipment
+- Auto-create HVIReport từ spec data (Mic/Len/GPT) khi parse Offer
 
 ## Cấu trúc Database
 
@@ -142,11 +157,12 @@ Giá net = 209.86 - 2.00 = 207.86 c/kg
 - ICESettlementsJson (JSON string chứa các ICE settlement months)
 - CreatedAt
 
-### Bảng Lots (Phase 2A + v1.3)
+### Bảng Lots (Phase 2A + v1.4)
 - Id (PK), LotCode (Unique), ShipperId (FK → Shippers)
 - Origin, CropYear, Type
 - QuantityOriginal, QuantityAvailable
 - BasisCents (decimal, 11.00 = hiển thị 1100 points)
+- **OutrightPrice** (decimal, giá cố định c/lb, ưu tiên khi > 0)
 - ShipmentDate, ShipmentDateText, SpecialSpec
 - Status (Available/Reserved/Sold)
 - LatestOfferId (FK → Offers), HVIReportId (FK → HVIReports)
@@ -234,7 +250,45 @@ Kiểm tra:
 - Kiểm tra file size < 10MB
 - Đảm bảo file là PDF hợp lệ
 
+## Multi-Shipper Parser (v1.4)
+
+Hệ thống sử dụng **Strategy Pattern** (`IShipperParser`) để parse PDF từ nhiều shipper:
+
+### Parsers hiện có
+
+| Parser | File | CanParse trigger | Đặc điểm |
+|--------|------|------------------|----------|
+| **ToyoshimaParser** | `Services/Parsers/ToyoshimaParser.cs` | Filename chứa "Toyoshima" / "Offer_FE", hoặc nội dung chứa "Toyoshima"/"Nishiki" | Origin sections, compressed spec (SM37G5), M/E Recap lots |
+| **OlamParser** | `Services/Parsers/OlamParser.cs` | Filename/content chứa "Olam" | 6 patterns: Afloat, Recap+Avg, US Recap, Named lot, Generic on-call, Fixed+basis |
+| **BrighannParser** | `Services/Parsers/BrighannParser.cs` | Filename/content chứa "Brighann" | CIF format, auto-generate LotCode (AU-SM37-001) |
+
+### Thêm shipper mới
+
+1. Tạo class implement `IShipperParser` trong `Services/Parsers/`
+2. Implement `ShipperName`, `CanParse()`, `Parse()`
+3. Register trong `PdfParserService.cs` constructor
+
+### LotCode generation
+
+- **Toyoshima**: Lot code từ PDF (ME066M6, ME096A1...)
+- **Olam**: Lot name nếu có (T/APEX), hoặc auto-gen `OL-{origin}-{seq}`
+- **Brighann**: Auto-gen `{originCode}-{type}{staple}-{seq}` (BR-SM37-001)
+
 ## Lịch sử Version
+
+### v1.4.0 (2026-05-04)
+- **Multi-shipper parser**: Olam (6 patterns), Brighann (CIF format)
+- **OutrightPrice**: hỗ trợ Fixed Price cho lots không dùng ICE+Basis
+- **Auto-create HVIReport** từ parsed spec (Mic/Len/GPT) khi sync lots
+- **Lot page cải tiến**: gộp Type/Spec, Shipment/ETA, hiển thị Mic/Len/GPT trực tiếp
+- **Xóa lot**: nút xóa trong Lot Management
+- Migration: `AddLotOutrightPrice` thêm cột `OutrightPrice` vào bảng `Lots`
+
+### v1.3.0 (2026-05-04)
+- Lot Management page 23 cột
+- Multi-select export Excel
+- HVI detail modal
+- Filter theo shipper, origin, status, shipment month
 
 ### v1.1.0 (2026-05-04)
 - Tesseract OCR integration (CLI mode) cho HVI scan PDFs
@@ -252,8 +306,9 @@ Kiểm tra:
 Giai đoạn tiếp theo:
 - Matching hai chiều với Bid từ nhà máy
 - Dashboard thống kê
-- Multi-supplier PDF templates
+- Thêm parser cho shipper mới (Cargill, Louis Dreyfus...)
 - API cho mobile app
+- Batch re-parse offers khi cập nhật parser
 
 ## Liên hệ
 

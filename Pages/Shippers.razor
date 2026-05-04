@@ -1,0 +1,221 @@
+@page "/shippers"
+@using CBAS.Web.Data
+@using CBAS.Web.Models
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Context
+
+<PageTitle>Quản lý Shipper</PageTitle>
+
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Quản lý Shipper</h2>
+        <button class="btn btn-primary" @onclick="ShowAddForm">+ Thêm Shipper</button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(message))
+    {
+        <div class="alert @(isError ? "alert-danger" : "alert-success") alert-dismissible fade show">
+            @message
+            <button type="button" class="btn-close" @onclick="() => message = null"></button>
+        </div>
+    }
+
+    @* Add/Edit Form *@
+    @if (showForm)
+    {
+        <div class="card mb-4">
+            <div class="card-header">@(editingShipper.ShipperId == 0 ? "Thêm Shipper mới" : "Sửa Shipper")</div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Tên Shipper *</label>
+                        <input class="form-control" @bind="editingShipper.Name" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Email</label>
+                        <input class="form-control" @bind="editingShipper.Email" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Điện thoại</label>
+                        <input class="form-control" @bind="editingShipper.Phone" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Thông tin liên hệ</label>
+                        <input class="form-control" @bind="editingShipper.ContactInfo" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Ghi chú</label>
+                        <input class="form-control" @bind="editingShipper.Notes" />
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <button class="btn btn-success me-2" @onclick="SaveShipper">Lưu</button>
+                    <button class="btn btn-secondary" @onclick="CancelForm">Hủy</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* Shipper List *@
+    <div class="card">
+        <div class="card-body p-0">
+            <table class="table table-striped table-hover mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Tên</th>
+                        <th>Email</th>
+                        <th>Điện thoại</th>
+                        <th class="text-center">Offers</th>
+                        <th class="text-center">Lots</th>
+                        <th class="text-center">Trạng thái</th>
+                        <th>Ngày tạo</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (shippers == null)
+                    {
+                        <tr><td colspan="8" class="text-center py-3">Đang tải...</td></tr>
+                    }
+                    else if (!shippers.Any())
+                    {
+                        <tr><td colspan="8" class="text-center py-3 text-muted">Chưa có shipper nào</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var s in shippers)
+                        {
+                            <tr>
+                                <td><strong>@s.Name</strong></td>
+                                <td>@s.Email</td>
+                                <td>@s.Phone</td>
+                                <td class="text-center">@s.Offers.Count</td>
+                                <td class="text-center">@s.Lots.Count</td>
+                                <td class="text-center">
+                                    @if (s.IsActive)
+                                    {
+                                        <span class="badge bg-success">Active</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    }
+                                </td>
+                                <td>@s.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy")</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => EditShipper(s)">Sửa</button>
+                                    <button class="btn btn-sm btn-outline-warning" @onclick="() => ToggleActive(s)">
+                                        @(s.IsActive ? "Tắt" : "Bật")
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<Shipper>? shippers;
+    private Shipper editingShipper = new();
+    private bool showForm = false;
+    private string? message;
+    private bool isError = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadShippers();
+    }
+
+    private async Task LoadShippers()
+    {
+        shippers = await Context.Shippers
+            .Include(s => s.Offers)
+            .Include(s => s.Lots)
+            .OrderBy(s => s.Name)
+            .ToListAsync();
+    }
+
+    private void ShowAddForm()
+    {
+        editingShipper = new Shipper();
+        showForm = true;
+        message = null;
+    }
+
+    private void EditShipper(Shipper s)
+    {
+        editingShipper = new Shipper
+        {
+            ShipperId = s.ShipperId,
+            Name = s.Name,
+            Email = s.Email,
+            Phone = s.Phone,
+            ContactInfo = s.ContactInfo,
+            Notes = s.Notes,
+            IsActive = s.IsActive
+        };
+        showForm = true;
+        message = null;
+    }
+
+    private void CancelForm()
+    {
+        showForm = false;
+        editingShipper = new();
+    }
+
+    private async Task SaveShipper()
+    {
+        if (string.IsNullOrWhiteSpace(editingShipper.Name))
+        {
+            message = "Tên shipper không được để trống";
+            isError = true;
+            return;
+        }
+
+        try
+        {
+            if (editingShipper.ShipperId == 0)
+            {
+                editingShipper.CreatedAt = DateTime.UtcNow;
+                Context.Shippers.Add(editingShipper);
+            }
+            else
+            {
+                var existing = await Context.Shippers.FindAsync(editingShipper.ShipperId);
+                if (existing != null)
+                {
+                    existing.Name = editingShipper.Name;
+                    existing.Email = editingShipper.Email;
+                    existing.Phone = editingShipper.Phone;
+                    existing.ContactInfo = editingShipper.ContactInfo;
+                    existing.Notes = editingShipper.Notes;
+                }
+            }
+
+            await Context.SaveChangesAsync();
+            message = editingShipper.ShipperId == 0 ? "Đã thêm shipper" : "Đã cập nhật shipper";
+            isError = false;
+            showForm = false;
+            editingShipper = new();
+            await LoadShippers();
+        }
+        catch (DbUpdateException ex)
+        {
+            message = ex.InnerException?.Message?.Contains("unique") == true
+                ? "Tên shipper đã tồn tại"
+                : $"Lỗi: {ex.InnerException?.Message ?? ex.Message}";
+            isError = true;
+        }
+    }
+
+    private async Task ToggleActive(Shipper s)
+    {
+        s.IsActive = !s.IsActive;
+        await Context.SaveChangesAsync();
+        await LoadShippers();
+    }
+}

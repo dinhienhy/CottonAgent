@@ -1,0 +1,138 @@
+@page "/offers"
+@using CBAS.Web.Data
+@using CBAS.Web.Models
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Context
+
+<PageTitle>Lịch sử Offer</PageTitle>
+
+<div class="container-fluid py-4">
+    <h2 class="mb-4">Lịch sử Offer</h2>
+
+    @* Filters *@
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small mb-0">Shipper</label>
+                    <select class="form-select form-select-sm" @bind="filterShipper">
+                        <option value="">Tất cả</option>
+                        @foreach (var name in shipperNames)
+                        {
+                            <option value="@name">@name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-0">Từ ngày</label>
+                    <input type="date" class="form-control form-control-sm" @bind="filterDateFrom" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-0">Đến ngày</label>
+                    <input type="date" class="form-control form-control-sm" @bind="filterDateTo" />
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-sm btn-primary" @onclick="ApplyFilter">Lọc</button>
+                    <button class="btn btn-sm btn-outline-secondary ms-1" @onclick="ClearFilter">Xóa</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Offer List *@
+    <div class="card">
+        <div class="card-body p-0">
+            <table class="table table-striped table-hover mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>#</th>
+                        <th>Ngày</th>
+                        <th>Shipper</th>
+                        <th>File</th>
+                        <th class="text-center">ICE</th>
+                        <th class="text-center">Commission</th>
+                        <th class="text-center">Số Lots</th>
+                        <th>Tạo lúc</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (offers == null)
+                    {
+                        <tr><td colspan="8" class="text-center py-3">Đang tải...</td></tr>
+                    }
+                    else if (!offers.Any())
+                    {
+                        <tr><td colspan="8" class="text-center py-3 text-muted">Không có offer nào</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var o in offers)
+                        {
+                            <tr>
+                                <td>@o.OfferId</td>
+                                <td>@o.OfferDate.ToLocalTime().ToString("dd/MM/yyyy")</td>
+                                <td><strong>@o.SupplierName</strong></td>
+                                <td><small>@o.FileName</small></td>
+                                <td class="text-center">@o.ICEValue.ToString("F2")</td>
+                                <td class="text-center">@o.CommissionPercent.ToString("F2")%</td>
+                                <td class="text-center">
+                                    <span class="badge bg-info">@o.OfferLots.Count lots</span>
+                                </td>
+                                <td><small>@o.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</small></td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<Offer>? offers;
+    private List<string> shipperNames = new();
+    private string filterShipper = "";
+    private DateTime? filterDateFrom;
+    private DateTime? filterDateTo;
+
+    protected override async Task OnInitializedAsync()
+    {
+        shipperNames = await Context.Shippers
+            .Where(s => s.IsActive)
+            .OrderBy(s => s.Name)
+            .Select(s => s.Name)
+            .ToListAsync();
+
+        await LoadOffers();
+    }
+
+    private async Task LoadOffers()
+    {
+        var query = Context.Offers
+            .Include(o => o.OfferLots)
+            .AsQueryable();
+
+        if (!string.IsNullOrEmpty(filterShipper))
+            query = query.Where(o => o.SupplierName == filterShipper);
+
+        if (filterDateFrom.HasValue)
+            query = query.Where(o => o.OfferDate >= DateTime.SpecifyKind(filterDateFrom.Value, DateTimeKind.Utc));
+
+        if (filterDateTo.HasValue)
+            query = query.Where(o => o.OfferDate <= DateTime.SpecifyKind(filterDateTo.Value.AddDays(1), DateTimeKind.Utc));
+
+        offers = await query
+            .OrderByDescending(o => o.CreatedAt)
+            .ToListAsync();
+    }
+
+    private async Task ApplyFilter() => await LoadOffers();
+
+    private async Task ClearFilter()
+    {
+        filterShipper = "";
+        filterDateFrom = null;
+        filterDateTo = null;
+        await LoadOffers();
+    }
+}

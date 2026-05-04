@@ -40,12 +40,23 @@ public class OfferProcessingService : IOfferProcessingService
             CreatedAt = DateTime.UtcNow
         };
 
+        // Auto-create or find Shipper
+        var shipper = await _context.Shippers
+            .FirstOrDefaultAsync(s => s.Name == offer.SupplierName);
+        if (shipper == null)
+        {
+            shipper = new Shipper { Name = offer.SupplierName, CreatedAt = DateTime.UtcNow };
+            _context.Shippers.Add(shipper);
+            await _context.SaveChangesAsync();
+        }
+        offer.ShipperId = shipper.ShipperId;
+
         _context.Offers.Add(offer);
         
         try
         {
             await _context.SaveChangesAsync();
-            Console.WriteLine($"Offer saved. OfferId: {offer.OfferId}");
+            Console.WriteLine($"Offer saved. OfferId: {offer.OfferId}, ShipperId: {shipper.ShipperId}");
         }
         catch (Exception ex)
         {
@@ -275,7 +286,70 @@ public class OfferProcessingService : IOfferProcessingService
 
     public async Task RecalculateOutputsAsync(int offerId)
     {
+        await SyncLotsAsync(offerId);
         await GenerateProcessedOutputsAsync(offerId);
+    }
+
+    private async Task SyncLotsAsync(int offerId)
+    {
+        var offer = await _context.Offers
+            .Include(o => o.OfferLots)
+            .FirstOrDefaultAsync(o => o.OfferId == offerId);
+        if (offer == null) return;
+
+        var shipperId = offer.ShipperId;
+        if (!shipperId.HasValue) return;
+
+        foreach (var offerLot in offer.OfferLots)
+        {
+            if (string.IsNullOrEmpty(offerLot.LotCode)) continue;
+
+            var lot = await _context.Lots.FirstOrDefaultAsync(l => l.LotCode == offerLot.LotCode);
+
+            if (lot == null)
+            {
+                // Create new Lot
+                lot = new Lot
+                {
+                    LotCode = offerLot.LotCode,
+                    ShipperId = shipperId.Value,
+                    Origin = offerLot.Origin,
+                    CropYear = offerLot.CropYear,
+                    Type = offerLot.Type,
+                    QuantityOriginal = offerLot.Quantity,
+                    QuantityAvailable = offerLot.Quantity,
+                    Status = LotStatus.Available,
+                    LatestOfferId = offerId,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _context.Lots.Add(lot);
+                await _context.SaveChangesAsync();
+            }
+            else
+            {
+                // Update existing Lot — quantity from latest offer replaces old
+                lot.QuantityAvailable = offerLot.Quantity;
+                lot.LatestOfferId = offerId;
+                lot.UpdatedAt = DateTime.UtcNow;
+                if (!string.IsNullOrEmpty(offerLot.Origin)) lot.Origin = offerLot.Origin;
+                if (!string.IsNullOrEmpty(offerLot.CropYear)) lot.CropYear = offerLot.CropYear;
+            }
+
+            // Link OfferLot → Lot
+            offerLot.MasterLotId = lot.Id;
+
+            // Link HVIReport → Lot if exists
+            var hvi = await _context.HVIReports.FirstOrDefaultAsync(h => h.LotCode == offerLot.LotCode);
+            if (hvi != null)
+            {
+                hvi.MasterLotId = lot.Id;
+                lot.HVIReportId = hvi.HVIId;
+            }
+        }
+
+        await _context.SaveChangesAsync();
+        Console.WriteLine($"Synced lots for offer {offerId}");
     }
 
     public async Task<List<OutputGroupDto>> GetProcessedOutputAsync(int offerId)

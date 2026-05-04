@@ -15,6 +15,11 @@ public class Offer
     [MaxLength(200)]
     public string SupplierName { get; set; } = string.Empty;
 
+    public int? ShipperId { get; set; }
+
+    [ForeignKey(nameof(ShipperId))]
+    public virtual Shipper? Shipper { get; set; }
+
     [Required]
     [MaxLength(500)]
     public string FileName { get; set; } = string.Empty;

@@ -36,6 +36,7 @@ namespace CBAS.Web.Migrations
                     b.Property<decimal?>("Leaf").HasColumnType("decimal(5,2)");
                     b.Property<decimal?>("Length").HasColumnType("decimal(5,2)");
                     b.Property<string>("LotCode").IsRequired().HasMaxLength(100).HasColumnType("character varying(100)");
+                    b.Property<int?>("MasterLotId").HasColumnType("integer");
                     b.Property<decimal?>("Micronaire").HasColumnType("decimal(5,2)");
                     b.Property<string>("RawDataJson").HasColumnType("text");
                     b.Property<decimal?>("StrengthGPT").HasColumnType("decimal(5,2)");
@@ -43,7 +44,34 @@ namespace CBAS.Web.Migrations
                     b.Property<decimal?>("Uniformity").HasColumnType("decimal(5,2)");
                     b.HasKey("HVIId");
                     b.HasIndex("LotCode").IsUnique();
+                    b.HasIndex("MasterLotId");
                     b.ToTable("HVIReports");
+                });
+
+            modelBuilder.Entity("CBAS.Web.Models.Lot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                    b.Property<DateTime>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<string>("CropYear").HasMaxLength(50).HasColumnType("character varying(50)");
+                    b.Property<int?>("HVIReportId").HasColumnType("integer");
+                    b.Property<int?>("LatestOfferId").HasColumnType("integer");
+                    b.Property<string>("LotCode").IsRequired().HasMaxLength(100).HasColumnType("character varying(100)");
+                    b.Property<string>("Origin").IsRequired().HasMaxLength(100).HasColumnType("character varying(100)");
+                    b.Property<decimal>("QuantityAvailable").HasColumnType("numeric(10,2)");
+                    b.Property<decimal>("QuantityOriginal").HasColumnType("numeric(10,2)");
+                    b.Property<int>("ShipperId").HasColumnType("integer");
+                    b.Property<int>("Status").HasColumnType("integer");
+                    b.Property<string>("Type").HasMaxLength(100).HasColumnType("character varying(100)");
+                    b.Property<DateTime>("UpdatedAt").HasColumnType("timestamp with time zone");
+                    b.HasKey("Id");
+                    b.HasIndex("HVIReportId");
+                    b.HasIndex("LatestOfferId");
+                    b.HasIndex("LotCode").IsUnique();
+                    b.HasIndex("ShipperId");
+                    b.ToTable("Lots");
                 });
 
             modelBuilder.Entity("CBAS.Web.Models.Offer", b =>
@@ -58,8 +86,10 @@ namespace CBAS.Web.Migrations
                     b.Property<decimal>("ICEValue").HasColumnType("decimal(10,2)");
                     b.Property<string>("ICESettlementsJson").HasColumnType("text");
                     b.Property<DateTime>("OfferDate").HasColumnType("timestamp with time zone");
+                    b.Property<int?>("ShipperId").HasColumnType("integer");
                     b.Property<string>("SupplierName").IsRequired().HasMaxLength(200).HasColumnType("character varying(200)");
                     b.HasKey("OfferId");
+                    b.HasIndex("ShipperId");
                     b.ToTable("Offers");
                 });
 
@@ -88,10 +118,30 @@ namespace CBAS.Web.Migrations
                     b.Property<string>("SpecialSpec").HasMaxLength(500).HasColumnType("character varying(500)");
                     b.Property<string>("StrengthSpec").HasMaxLength(50).HasColumnType("character varying(50)");
                     b.Property<string>("Type").IsRequired().HasMaxLength(100).HasColumnType("character varying(100)");
+                    b.Property<int?>("MasterLotId").HasColumnType("integer");
                     b.HasKey("LotId");
                     b.HasIndex("LotCode");
+                    b.HasIndex("MasterLotId");
                     b.HasIndex("OfferId");
                     b.ToTable("OfferLots");
+                });
+
+            modelBuilder.Entity("CBAS.Web.Models.Shipper", b =>
+                {
+                    b.Property<int>("ShipperId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("ShipperId"));
+                    b.Property<string>("ContactInfo").HasMaxLength(500).HasColumnType("character varying(500)");
+                    b.Property<DateTime>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<string>("Email").HasMaxLength(200).HasColumnType("character varying(200)");
+                    b.Property<bool>("IsActive").HasColumnType("boolean");
+                    b.Property<string>("Name").IsRequired().HasMaxLength(200).HasColumnType("character varying(200)");
+                    b.Property<string>("Notes").HasMaxLength(1000).HasColumnType("character varying(1000)");
+                    b.Property<string>("Phone").HasMaxLength(50).HasColumnType("character varying(50)");
+                    b.HasKey("ShipperId");
+                    b.HasIndex("Name").IsUnique();
+                    b.ToTable("Shippers");
                 });
 
             modelBuilder.Entity("CBAS.Web.Models.ProcessedOutput", b =>
@@ -147,13 +197,51 @@ namespace CBAS.Web.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("CBAS.Web.Models.HVIReport", b =>
+                {
+                    b.HasOne("CBAS.Web.Models.Lot", "MasterLot")
+                        .WithMany()
+                        .HasForeignKey("MasterLotId");
+                    b.Navigation("MasterLot");
+                });
+
+            modelBuilder.Entity("CBAS.Web.Models.Lot", b =>
+                {
+                    b.HasOne("CBAS.Web.Models.HVIReport", "HVIReport")
+                        .WithMany()
+                        .HasForeignKey("HVIReportId");
+                    b.HasOne("CBAS.Web.Models.Offer", "LatestOffer")
+                        .WithMany()
+                        .HasForeignKey("LatestOfferId");
+                    b.HasOne("CBAS.Web.Models.Shipper", "Shipper")
+                        .WithMany("Lots")
+                        .HasForeignKey("ShipperId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                    b.Navigation("HVIReport");
+                    b.Navigation("LatestOffer");
+                    b.Navigation("Shipper");
+                });
+
+            modelBuilder.Entity("CBAS.Web.Models.Offer", b =>
+                {
+                    b.HasOne("CBAS.Web.Models.Shipper", "Shipper")
+                        .WithMany("Offers")
+                        .HasForeignKey("ShipperId");
+                    b.Navigation("Shipper");
+                });
+
             modelBuilder.Entity("CBAS.Web.Models.OfferLot", b =>
                 {
+                    b.HasOne("CBAS.Web.Models.Lot", "MasterLot")
+                        .WithMany()
+                        .HasForeignKey("MasterLotId");
                     b.HasOne("CBAS.Web.Models.Offer", "Offer")
                         .WithMany("OfferLots")
                         .HasForeignKey("OfferId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                    b.Navigation("MasterLot");
                     b.Navigation("Offer");
                 });
 
@@ -176,6 +264,12 @@ namespace CBAS.Web.Migrations
             modelBuilder.Entity("CBAS.Web.Models.Offer", b =>
                 {
                     b.Navigation("OfferLots");
+                });
+
+            modelBuilder.Entity("CBAS.Web.Models.Shipper", b =>
+                {
+                    b.Navigation("Lots");
+                    b.Navigation("Offers");
                 });
 #pragma warning restore 612, 618
         }

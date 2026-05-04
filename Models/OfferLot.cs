@@ -67,4 +67,8 @@ public class OfferLot
     [MaxLength(50)]
     public string? StrengthSpec { get; set; }
 
+    public int? MasterLotId { get; set; }
+
+    [ForeignKey(nameof(MasterLotId))]
+    public virtual Lot? MasterLot { get; set; }
 }

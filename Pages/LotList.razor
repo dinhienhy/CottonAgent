@@ -1,0 +1,243 @@
+@page "/lots"
+@using CBAS.Web.Data
+@using CBAS.Web.Models
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Context
+
+<PageTitle>Quản lý Lot</PageTitle>
+
+<div class="container-fluid py-4">
+    <h2 class="mb-4">Quản lý Lot hàng</h2>
+
+    @* Filters *@
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label small mb-0">Shipper</label>
+                    <select class="form-select form-select-sm" @bind="filterShipper">
+                        <option value="0">Tất cả</option>
+                        @foreach (var s in shipperList)
+                        {
+                            <option value="@s.ShipperId">@s.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-0">Origin</label>
+                    <select class="form-select form-select-sm" @bind="filterOrigin">
+                        <option value="">Tất cả</option>
+                        @foreach (var o in originList)
+                        {
+                            <option value="@o">@o</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-0">Trạng thái</label>
+                    <select class="form-select form-select-sm" @bind="filterStatus">
+                        <option value="-1">Tất cả</option>
+                        <option value="0">Available</option>
+                        <option value="1">Reserved</option>
+                        <option value="2">Sold</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-0">Tìm Lot Code</label>
+                    <input class="form-control form-control-sm" @bind="filterLotCode" placeholder="ME066..." />
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-sm btn-primary" @onclick="ApplyFilter">Lọc</button>
+                    <button class="btn btn-sm btn-outline-secondary ms-1" @onclick="ClearFilter">Xóa</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Summary *@
+    @if (lots != null)
+    {
+        <div class="row mb-3">
+            <div class="col-md-3">
+                <div class="card border-success">
+                    <div class="card-body py-2 text-center">
+                        <div class="text-muted small">Available</div>
+                        <strong class="text-success fs-4">@lots.Count(l => l.Status == LotStatus.Available)</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-warning">
+                    <div class="card-body py-2 text-center">
+                        <div class="text-muted small">Reserved</div>
+                        <strong class="text-warning fs-4">@lots.Count(l => l.Status == LotStatus.Reserved)</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-secondary">
+                    <div class="card-body py-2 text-center">
+                        <div class="text-muted small">Sold</div>
+                        <strong class="text-secondary fs-4">@lots.Count(l => l.Status == LotStatus.Sold)</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-primary">
+                    <div class="card-body py-2 text-center">
+                        <div class="text-muted small">Tổng QTY Available</div>
+                        <strong class="text-primary fs-4">@lots.Where(l => l.Status == LotStatus.Available).Sum(l => l.QuantityAvailable).ToString("F0") mt</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* Lot Table *@
+    <div class="card">
+        <div class="card-body p-0">
+            <table class="table table-striped table-hover mb-0" style="font-size: 0.9rem;">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Lot Code</th>
+                        <th>Shipper</th>
+                        <th>Origin</th>
+                        <th>Crop Year</th>
+                        <th>Type</th>
+                        <th class="text-end">QTY Original</th>
+                        <th class="text-end">QTY Available</th>
+                        <th class="text-center">Status</th>
+                        <th class="text-center">HVI</th>
+                        <th>Updated</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (lots == null)
+                    {
+                        <tr><td colspan="11" class="text-center py-3">Đang tải...</td></tr>
+                    }
+                    else if (!lots.Any())
+                    {
+                        <tr><td colspan="11" class="text-center py-3 text-muted">Không có lot nào</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var lot in lots)
+                        {
+                            <tr>
+                                <td><strong>@lot.LotCode</strong></td>
+                                <td>@lot.Shipper.Name</td>
+                                <td>@lot.Origin</td>
+                                <td>@lot.CropYear</td>
+                                <td>@lot.Type</td>
+                                <td class="text-end">@lot.QuantityOriginal.ToString("F0")</td>
+                                <td class="text-end">@lot.QuantityAvailable.ToString("F0")</td>
+                                <td class="text-center">
+                                    @switch (lot.Status)
+                                    {
+                                        case LotStatus.Available:
+                                            <span class="badge bg-success">Available</span>
+                                            break;
+                                        case LotStatus.Reserved:
+                                            <span class="badge bg-warning text-dark">Reserved</span>
+                                            break;
+                                        case LotStatus.Sold:
+                                            <span class="badge bg-secondary">Sold</span>
+                                            break;
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    @if (lot.HVIReportId.HasValue)
+                                    {
+                                        <span class="badge bg-info">HVI ✓</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-light text-muted">—</span>
+                                    }
+                                </td>
+                                <td><small>@lot.UpdatedAt.ToLocalTime().ToString("dd/MM HH:mm")</small></td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        @if (lot.Status == LotStatus.Available)
+                                        {
+                                            <button class="btn btn-outline-warning" @onclick="() => SetStatus(lot, LotStatus.Reserved)">Reserve</button>
+                                        }
+                                        @if (lot.Status == LotStatus.Reserved)
+                                        {
+                                            <button class="btn btn-outline-secondary" @onclick="() => SetStatus(lot, LotStatus.Sold)">Sold</button>
+                                            <button class="btn btn-outline-success" @onclick="() => SetStatus(lot, LotStatus.Available)">Unreserve</button>
+                                        }
+                                        @if (lot.Status == LotStatus.Sold)
+                                        {
+                                            <button class="btn btn-outline-success" @onclick="() => SetStatus(lot, LotStatus.Available)">Reopen</button>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<Lot>? lots;
+    private List<Shipper> shipperList = new();
+    private List<string> originList = new();
+    private int filterShipper = 0;
+    private string filterOrigin = "";
+    private int filterStatus = -1;
+    private string filterLotCode = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        shipperList = await Context.Shippers.Where(s => s.IsActive).OrderBy(s => s.Name).ToListAsync();
+        originList = await Context.Lots.Select(l => l.Origin).Distinct().OrderBy(o => o).ToListAsync();
+        await LoadLots();
+    }
+
+    private async Task LoadLots()
+    {
+        var query = Context.Lots
+            .Include(l => l.Shipper)
+            .AsQueryable();
+
+        if (filterShipper > 0)
+            query = query.Where(l => l.ShipperId == filterShipper);
+        if (!string.IsNullOrEmpty(filterOrigin))
+            query = query.Where(l => l.Origin == filterOrigin);
+        if (filterStatus >= 0)
+            query = query.Where(l => (int)l.Status == filterStatus);
+        if (!string.IsNullOrEmpty(filterLotCode))
+            query = query.Where(l => l.LotCode.Contains(filterLotCode));
+
+        lots = await query
+            .OrderBy(l => l.Status)
+            .ThenBy(l => l.Origin)
+            .ThenBy(l => l.LotCode)
+            .ToListAsync();
+    }
+
+    private async Task ApplyFilter() => await LoadLots();
+
+    private async Task ClearFilter()
+    {
+        filterShipper = 0;
+        filterOrigin = "";
+        filterStatus = -1;
+        filterLotCode = "";
+        await LoadLots();
+    }
+
+    private async Task SetStatus(Lot lot, LotStatus newStatus)
+    {
+        lot.Status = newStatus;
+        lot.UpdatedAt = DateTime.UtcNow;
+        await Context.SaveChangesAsync();
+        await LoadLots();
+    }
+}

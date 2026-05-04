@@ -44,6 +44,10 @@ public class HVIReport
 
     public string? RawDataJson { get; set; }
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public int? MasterLotId { get; set; }
 
+    [ForeignKey(nameof(MasterLotId))]
+    public virtual Lot? MasterLot { get; set; }
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

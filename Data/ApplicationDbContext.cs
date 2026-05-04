@@ -10,8 +10,10 @@ public class ApplicationDbContext : DbContext
     {
     }
 
+    public DbSet<Shipper> Shippers { get; set; } = null!;
     public DbSet<Offer> Offers { get; set; } = null!;
     public DbSet<OfferLot> OfferLots { get; set; } = null!;
+    public DbSet<Lot> Lots { get; set; } = null!;
     public DbSet<HVIReport> HVIReports { get; set; } = null!;
     public DbSet<ProcessedOutput> ProcessedOutputs { get; set; } = null!;
     public DbSet<User> Users { get; set; } = null!;
@@ -44,5 +46,19 @@ public class ApplicationDbContext : DbContext
 
         modelBuilder.Entity<OfferLot>()
             .HasIndex(ol => ol.LotCode);
+
+        modelBuilder.Entity<Shipper>()
+            .HasIndex(s => s.Name)
+            .IsUnique();
+
+        modelBuilder.Entity<Lot>()
+            .HasIndex(l => l.LotCode)
+            .IsUnique();
+
+        modelBuilder.Entity<Lot>()
+            .HasOne(l => l.Shipper)
+            .WithMany(s => s.Lots)
+            .HasForeignKey(l => l.ShipperId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

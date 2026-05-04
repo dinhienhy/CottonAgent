@@ -1,27 +1,28 @@
 # Cotton Broker Automation System (CBAS) - Project Summary
 
-**Version**: 1.0.0  
-**Date**: 03/05/2026  
-**Status**: ✅ COMPLETED - Ready for Production
+**Version**: 1.1.0  
+**Date**: 04/05/2026  
+**Status**: ✅ PRODUCTION - Deployed on Railway  
+**URL**: [cottonagent-production-92e0.up.railway.app](https://cottonagent-production-92e0.up.railway.app)
 
 ---
 
 ## 📋 Tổng quan Dự án
 
-Hệ thống CBAS đã được xây dựng hoàn chỉnh theo đúng yêu cầu giai đoạn 1, giúp tự động hóa quy trình nhận Offer từ shipper và tạo Output chuẩn để chào nhà máy Việt Nam.
+Hệ thống CBAS tự động hóa quy trình nhận Offer từ shipper và tạo Output chuẩn để chào nhà máy Việt Nam. Bao gồm OCR tự động cho HVI scan PDFs và 3-step workflow: Upload → HVI Review → Results.
 
 ## ✅ Các Chức năng Đã Hoàn thành
 
 ### 1. Core Features
-- ✅ Upload Offer PDF từ shipper (Toyoshima và suppliers khác)
+- ✅ Upload Offer PDF từ shipper (Toyoshima)
 - ✅ Upload nhiều HVI Report PDF (tối đa 20 files cùng lúc)
-- ✅ Parse tự động Offer PDF để trích xuất thông tin lô
-- ✅ Parse tự động HVI PDF để lấy chỉ số kỹ thuật
-- ✅ Tự động liên kết HVI với lô dựa trên Lot Code
-- ✅ Tính giá theo công thức: (ICE + Basis/100) × 2.20462
-- ✅ Áp dụng Commission (mặc định 2 c/kg, có thể chỉnh)
-- ✅ Hiển thị bảng Output với 17 cột theo format chuẩn
-- ✅ Nhóm dữ liệu theo Shipment Date
+- ✅ Parse Offer PDF bằng **word-position grouping** (Y-coordinate rows)
+- ✅ Hỗ trợ generic lines và M/E Recap lines, multiple origins
+- ✅ ICE settlements extraction từ offer PDF
+- ✅ **Tesseract OCR** (CLI mode) cho HVI scan PDFs
+- ✅ 3-step workflow: Upload → HVI Review/Edit → Results
+- ✅ Tính giá: Outright(c/lb) = ICE + BasisCents → × 2.20462 = c/kg
+- ✅ Áp dụng Commission
 - ✅ Export Excel (.xlsx) format chuẩn
 
 ### 2. Technical Implementation
@@ -35,10 +36,10 @@ Hệ thống CBAS đã được xây dựng hoàn chỉnh theo đúng yêu cầu
 - ✅ Dependency Injection
 
 #### PDF Processing
-- ✅ PdfPig library cho PDF parsing
-- ✅ Regex-based text extraction
-- ✅ Table parsing cho HVI data
-- ✅ Error handling cho corrupt PDFs
+- ✅ PdfPig library cho PDF parsing (word-position grouping)
+- ✅ Spec code parsing: GC31336 = Gold Color, Rd=31, Leaf=3, Staple=36
+- ✅ Tesseract OCR CLI cho HVI scan PDFs (extract PNG → temp file → CLI)
+- ✅ Error handling với graceful degradation (OCR fail → manual input)
 
 #### Excel Export
 - ✅ ClosedXML library
@@ -73,46 +74,43 @@ CottonAgent/
 ├── Data/
 │   └── ApplicationDbContext.cs          # EF Core DbContext
 ├── Models/
-│   ├── Offer.cs                         # Offer entity
-│   ├── OfferLot.cs                      # Lot entity
+│   ├── Offer.cs                         # Offer entity (+ ICESettlementsJson)
+│   ├── OfferLot.cs                      # Lot entity (BasisCents, spec fields)
 │   ├── HVIReport.cs                     # HVI entity
 │   ├── ProcessedOutput.cs               # Output entity
 │   └── User.cs                          # User entity
 ├── Services/
 │   ├── IPdfParserService.cs             # PDF parser interface
-│   ├── PdfParserService.cs              # PDF parser implementation
+│   ├── PdfParserService.cs              # Word-position PDF parser
+│   ├── IOcrService.cs                   # OCR service interface
+│   ├── TesseractOcrService.cs           # Tesseract CLI OCR
 │   ├── IOfferProcessingService.cs       # Business logic interface
-│   ├── OfferProcessingService.cs        # Business logic implementation
+│   ├── OfferProcessingService.cs        # Business logic + OCR integration
 │   ├── IExcelExportService.cs           # Excel export interface
 │   ├── ExcelExportService.cs            # Excel export implementation
 │   ├── IAuthService.cs                  # Auth interface
 │   └── AuthService.cs                   # Auth implementation
 ├── DTOs/
 │   ├── OfferUploadDto.cs                # Upload data transfer object
-│   └── OutputRowDto.cs                  # Output data transfer object
+│   ├── OutputRowDto.cs                  # Output data transfer object
+│   ├── HVIInputDto.cs                   # HVI review/edit DTO (+ OcrStatus)
+│   └── OcrResult.cs                     # OCR result DTO
 ├── Pages/
 │   ├── Index.razor                      # Home page
 │   ├── Login.razor                      # Login page
-│   ├── OfferProcessor.razor             # Main processing page
+│   ├── OfferProcessor.razor             # 3-step workflow page
 │   ├── _Host.cshtml                     # Host page
 │   └── _Layout.cshtml                   # Layout
 ├── Shared/
 │   ├── NavMenu.razor                    # Navigation menu
 │   └── MainLayout.razor                 # Main layout
 ├── Migrations/                          # EF Core migrations
+├── SampleData/Toyoshima/                # Sample PDFs for testing
 ├── wwwroot/                             # Static files
-├── appsettings.json                     # Configuration
-├── Program.cs                           # Application entry point
+├── Program.cs                           # App entry + DI config
+├── Dockerfile                           # Multi-stage Docker build
 ├── CBAS.Web.csproj                      # Project file
-├── docker-compose.yml                   # Docker setup
-├── Procfile                             # Heroku deployment
-├── README.md                            # Main documentation
-├── QUICKSTART.md                        # Quick start guide
-├── DEPLOYMENT.md                        # Deployment guide
-├── TESTING.md                           # Testing guide
-├── CHANGELOG.md                         # Version history
-├── LICENSE                              # License file
-└── .gitignore                           # Git ignore rules
+└── docker-compose.yml                   # Local dev setup
 ```
 
 ## 🗄️ Database Schema
@@ -120,11 +118,9 @@ CottonAgent/
 ### Offers Table
 ```sql
 - OfferId (PK)
-- OfferDate
-- SupplierName
-- FileName
-- ICEValue (decimal)
-- CommissionPercent (decimal)
+- OfferDate, SupplierName, FileName
+- ICEValue (decimal), CommissionPercent (decimal)
+- ICESettlementsJson (JSON string chứa ICE settlement months)
 - CreatedAt
 ```
 
@@ -132,14 +128,11 @@ CottonAgent/
 ```sql
 - LotId (PK)
 - OfferId (FK)
-- LotCode (e.g., ME066M6)
-- Origin
-- CropYear
-- Quantity
-- Type
-- SpecialSpec
-- BasisPoints
-- ShipmentDate
+- LotCode (nullable - generic lines không có lot code)
+- Origin, CropYear, Quantity, QuantityText, Type
+- BasisCents (basis tính bằng cents)
+- OutrightPrice, SettlementMonth, ShipmentDateText
+- ColorSpec, LeafSpec, LengthSpec, MicronaireSpec, StrengthSpec
 - PriceCentsPerLb
 ```
 
@@ -164,17 +157,14 @@ CottonAgent/
 ### ProcessedOutputs Table
 ```sql
 - OutputId (PK)
-- OfferId (FK)
-- LotId (FK)
+- OfferId (FK), LotId (FK)
 - STT
-- Origin, CropYear, Quantity, Type...
+- Origin, CropYear, Quantity, QuantityText, Type
 - Color, Leaf, Length, Micronaire, StrengthMin
+- MicronaireText, StrengthText, ShipmentDateText
 - Basis, ShipmentDate
-- PriceCentsPerKg
-- PriceWithCommission
-- NetPrice
-- Notes
-- CreatedAt
+- PriceCentsPerKg, PriceWithCommission, NetPrice
+- Notes, CreatedAt
 ```
 
 ### Users Table
@@ -192,15 +182,16 @@ CottonAgent/
 ## 🔧 Technologies Used
 
 | Category | Technology | Version |
-|----------|-----------|---------|
+|----------|-----------|--------|
 | Framework | ASP.NET Core | 8.0 |
 | UI | Blazor Server | 8.0 |
 | Database | PostgreSQL | 15+ |
 | ORM | Entity Framework Core | 8.0.4 |
 | PDF Processing | PdfPig | 0.1.9 |
+| OCR | Tesseract CLI | 5.x (system) |
 | Excel Export | ClosedXML | 0.104.2 |
 | CSS Framework | Bootstrap | 5.x |
-| Containerization | Docker | Latest |
+| Deployment | Docker + Railway | Latest |
 
 ## 📊 Output Format
 
@@ -224,53 +215,35 @@ Bảng Excel có **17 cột** theo thứ tự:
 16. **giá net (Toyoshima)** - Net price
 17. **Ghi chú** - Notes
 
-## 🧮 Công thức Tính giá
+## � Công thức Tính giá
+
+Basis trong Offer là **cents** (không phải points/100).
 
 ```
-Giá (c/lb) = ICE Value + (Basis Points / 100)
-Giá (c/kg) = Giá (c/lb) × 2.20462
+Outright (c/lb) = ICE Settlement + Basis (cents)
+Giá (c/kg) = Outright (c/lb) × 2.20462
 Giá có Commission = Giá (c/kg) - Commission (c/kg)
-Giá net = Giá có Commission
 ```
 
-**Ví dụ**:
-- ICE: 84.19
-- Basis: +150 pts
+**Ví dụ** (ME066M6):
+- ICE JUL'26: 84.19
+- Basis: 11.00 cents
 - Commission: 2.00 c/kg
 
 ```
-Giá (c/lb) = 84.19 + (150/100) = 85.69
-Giá (c/kg) = 85.69 × 2.20462 = 188.93
-Giá có Commission = 188.93 - 2.00 = 186.93
-Giá net = 186.93
+Outright = 84.19 + 11.00 = 95.19 c/lb
+Giá (c/kg) = 95.19 × 2.20462 = 209.86 c/kg
+Giá net = 209.86 - 2.00 = 207.86 c/kg
 ```
 
 ## 🚀 Deployment Options
 
-### Option 1: Heroku (Recommended)
-- ✅ Easy deployment
-- ✅ Heroku Postgres addon
-- ✅ Free SSL certificate
-- ✅ Auto-scaling
-- 💰 Cost: ~$10/month
-
-### Option 2: Railway.app
-- ✅ Easiest deployment
-- ✅ GitHub integration
-- ✅ Free tier available
-- 💰 Cost: $5-10/month
-
-### Option 3: Azure App Service
-- ✅ Enterprise-grade
-- ✅ Best performance
-- ✅ Advanced monitoring
-- 💰 Cost: ~$25/month
-
-### Option 4: Self-hosted
-- ✅ Full control
-- ✅ Docker support
-- ✅ No monthly fees
-- ⚠️ Requires DevOps knowledge
+### Production: Railway.app (Đang dùng)
+- ✅ Auto-deploy từ GitHub `main` branch
+- ✅ PostgreSQL addon
+- ✅ Docker build tự động
+- ✅ SSL certificate
+- **URL**: `https://cottonagent-production-92e0.up.railway.app`
 
 ## 📚 Documentation Files
 
@@ -365,13 +338,13 @@ Giá net = 186.93
 
 ## 🎉 Project Status
 
-**COMPLETED ✅**
+**v1.1 DEPLOYED ✅**
 
-Hệ thống đã sẵn sàng cho:
-- ✅ Production deployment
+- ✅ Production deployment on Railway
+- ✅ OCR integration (Tesseract CLI)
+- ✅ 3-step workflow
+- ✅ Real Toyoshima format parser
 - ✅ User acceptance testing (UAT)
-- ✅ Training end users
-- ✅ Processing real offers
 
 ## 📦 Deliverables
 
@@ -398,6 +371,4 @@ Hệ thống đã sẵn sàng cho:
 
 ---
 
-**Dự án CBAS v1.0 đã hoàn thành 100% yêu cầu giai đoạn 1!** 🎊
-
-Sẵn sàng deploy lên production và bắt đầu sử dụng.
+**Dự án CBAS v1.1 đã deployed và sẵn sàng sử dụng!** 🎊

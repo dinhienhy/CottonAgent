@@ -2,6 +2,56 @@
 
 All notable changes to the Cotton Broker Automation System (CBAS) will be documented in this file.
 
+## [1.1.0] - 2026-05-04
+
+### Added - Phase 2: OCR & Parser Rewrite
+
+#### Tesseract OCR Integration
+- Tesseract OCR cho HVI scan PDFs (CLI mode — gọi `tesseract` trực tiếp, tránh lỗi native lib)
+- Extract ảnh từ PDF bằng PdfPig `TryGetPng()`, lưu temp file, chạy `tesseract img stdout -l eng --psm 3`
+- Parse kết quả OCR bằng regex để trích xuất HVI fields (Mic, Len, Str, Unif, Rd, Leaf, etc.)
+- Graceful degradation: OCR unavailable → manual input only
+
+#### 3-Step Workflow (OfferProcessor.razor)
+- **Step 1**: Upload Offer PDF + HVI PDFs
+- **Step 2**: HVI Review — OCR tự động chạy, hiển thị confidence score, raw text, cho phép edit/nhập tay
+- **Step 3**: Results — bảng Output + Export Excel
+
+#### Offer PDF Parser Rewrite
+- Parser viết lại hoàn toàn cho format Toyoshima thật
+- Sử dụng **word-position grouping** (Y-coordinate rows) thay vì regex on blob text
+- Hỗ trợ multiple sections by origin (USA, Brazil, Greece, Australia, Argentina, Mexico)
+- Hỗ trợ generic lines và M/E Recap lines
+- ICE settlements extraction: JUL'26=84.19, DEC'26=84.56, MAR'27=85.26
+
+#### Model Updates
+- `OfferLot.BasisPoints` → `BasisCents` (basis trong offer là cents, không phải points)
+- `OfferLot.LotCode` → nullable (generic lines không có lot code)
+- Thêm: `OutrightPrice`, `SettlementMonth`, `ShipmentDateText`, spec fields
+- `Offer.ICESettlementsJson` — lưu ICE settlement months
+- `HVIInputDto` — thêm `ConfidenceScore`, `RawOcrText`, `OcrStatus`
+
+#### New Files
+- `Services/IOcrService.cs` — OCR service interface
+- `Services/TesseractOcrService.cs` — Tesseract CLI implementation
+- `DTOs/OcrResult.cs` — OCR result DTO
+- `DTOs/HVIInputDto.cs` — HVI input/review DTO
+
+#### Docker & Deployment
+- Dockerfile: cài `tesseract-ocr` + `tesseract-ocr-eng` trong runtime stage
+- Deploy tự động lên Railway qua GitHub push
+- URL: `https://cottonagent-production-92e0.up.railway.app`
+
+### Fixed
+- Blazor Server `_blazorFilesById` bug: thêm `@key` trên InputFile, per-file error handling
+- SignalR `KeepAliveInterval` = 10s để tránh disconnect khi đọc file
+- Tesseract NuGet native lib mismatch (`libleptonica-1.82.0.so`) → chuyển sang CLI mode
+
+### Removed
+- `Tesseract` NuGet package 5.2.0 (thay bằng CLI)
+
+---
+
 ## [1.0.0] - 2026-05-03
 
 ### Added - Giai đoạn 1

@@ -18,6 +18,7 @@ builder.Services.AddServerSideBlazor()
         options.MaximumReceiveMessageSize = 10 * 1024 * 1024; // 10MB
         options.ClientTimeoutInterval = TimeSpan.FromMinutes(5); // Client timeout
         options.HandshakeTimeout = TimeSpan.FromSeconds(30); // Handshake timeout
+        options.KeepAliveInterval = TimeSpan.FromSeconds(10); // Keep alive during file reads
     })
     .AddCircuitOptions(options =>
     {

@@ -46,7 +46,7 @@
 
                     <div class="mb-3">
                         <label class="form-label">Offer PDF File</label>
-                        <InputFile class="form-control" OnChange="@OnOfferFileSelected" accept=".pdf" />
+                        <InputFile @key="offerFileKey" class="form-control" OnChange="@OnOfferFileSelected" accept=".pdf" />
                         @if (!string.IsNullOrEmpty(uploadModel.OfferFileName))
                         {
                             <div class="mt-2">
@@ -57,7 +57,7 @@
 
                     <div class="mb-3">
                         <label class="form-label">HVI Report PDF Files (Multiple)</label>
-                        <InputFile class="form-control" OnChange="@OnHVIFilesSelected" accept=".pdf" multiple />
+                        <InputFile @key="hviFileKey" class="form-control" OnChange="@OnHVIFilesSelected" accept=".pdf" multiple />
                         @if (hviFileNames.Any())
                         {
                             <div class="mt-2">
@@ -420,22 +420,24 @@
     private string? errorMessage;
     private int currentOfferId;
 
+    private string offerFileKey = "offer-1";
+    private string hviFileKey = "hvi-1";
+
     // ── Step 1: File selection handlers ──
     private async Task OnOfferFileSelected(InputFileChangeEventArgs e)
     {
         try
         {
+            errorMessage = null;
             var file = e.File;
             if (file != null)
             {
                 uploadModel.OfferFileName = file.Name;
-                var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+                using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
                 var memoryStream = new MemoryStream();
                 await stream.CopyToAsync(memoryStream);
                 memoryStream.Position = 0;
-                stream.Dispose();
                 uploadModel.OfferPdfStream = memoryStream;
-                StateHasChanged();
             }
         }
         catch (Exception ex)
@@ -448,25 +450,38 @@
     {
         try
         {
+            errorMessage = null;
             uploadModel.HVIFiles.Clear();
             hviFileNames.Clear();
             hviFileStreams.Clear();
-            var files = e.GetMultipleFiles(20);
-            foreach (var file in files)
-            {
-                hviFileNames.Add(file.Name);
-                var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
-                var memoryStream = new MemoryStream();
-                await stream.CopyToAsync(memoryStream);
-                memoryStream.Position = 0;
-                stream.Dispose();
-                uploadModel.HVIFiles.Add(new HVIFileDto { FileName = file.Name, FileStream = memoryStream });
 
-                // Index by lot code (extracted from filename)
-                var lotCode = System.IO.Path.GetFileNameWithoutExtension(file.Name);
-                hviFileStreams[lotCode] = memoryStream;
+            // Collect file references first (no await between GetMultipleFiles and OpenReadStream)
+            var files = e.GetMultipleFiles(20);
+            var fileList = files.ToList(); // materialize immediately
+
+            // Record names first (no async needed)
+            foreach (var file in fileList)
+                hviFileNames.Add(file.Name);
+
+            // Now read each file - use ReadAsync on each with error handling
+            foreach (var file in fileList)
+            {
+                try
+                {
+                    using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+                    var memoryStream = new MemoryStream();
+                    await stream.CopyToAsync(memoryStream);
+                    memoryStream.Position = 0;
+
+                    uploadModel.HVIFiles.Add(new HVIFileDto { FileName = file.Name, FileStream = memoryStream });
+                    var lotCode = System.IO.Path.GetFileNameWithoutExtension(file.Name);
+                    hviFileStreams[lotCode] = memoryStream;
+                }
+                catch (Exception fileEx)
+                {
+                    Console.Error.WriteLine($"Failed to read HVI file {file.Name}: {fileEx.Message}");
+                }
             }
-            StateHasChanged();
         }
         catch (Exception ex)
         {

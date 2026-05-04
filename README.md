@@ -1,6 +1,6 @@
 # Cotton Broker Automation System (CBAS)
 
-Hệ thống Tự động Xử lý Offer Bông - Version 1.2
+Hệ thống Tự động Xử lý Offer Bông - Version 1.3
 
 ## Tổng quan
 
@@ -118,12 +118,15 @@ Giá net = 209.86 - 2.00 = 207.86 c/kg
 - Xem lịch sử tất cả offers
 - Filter theo shipper, ngày
 
-### Lots (`/lots`)
-- Xem inventory lots với QuantityAvailable và Status
-- Filter theo shipper, origin, status, lot code
+### Lots (`/lots`) — Quản lý Lot nâng cao (v1.3)
+- **23 cột đầy đủ**: Lot Code, Shipper, Origin, CropYear, Type, Spec, Shipment, QTY, Color, Leaf, Length, Mic, Str, Basis (points), c/kg, +Comm, Net, Status, HVI, Action
+- **ICE + Commission** inputs ở góc trên — thay đổi → giá realtime refresh
+- **Multi-select** + nút "Tạo Output Chào Hàng" → export Excel (nhóm theo Shipment Date)
+- **HVI detail modal**: click "HVI ✓" → xem/chỉnh Mic, Length, Str, Uniformity, Color, Leaf
+- Filter: shipper, origin, status, lot code, **shipment month**
 - Summary cards: Available / Reserved / Sold / Tổng QTY
 - Thay đổi status: Reserve, Sold, Reopen
-- Auto-sync: khi upload Offer mới, tự tạo/update Lot
+- Auto-sync: khi upload Offer mới, tự tạo/update Lot + Basis + Shipment
 
 ## Cấu trúc Database
 
@@ -139,10 +142,12 @@ Giá net = 209.86 - 2.00 = 207.86 c/kg
 - ICESettlementsJson (JSON string chứa các ICE settlement months)
 - CreatedAt
 
-### Bảng Lots (Phase 2A)
+### Bảng Lots (Phase 2A + v1.3)
 - Id (PK), LotCode (Unique), ShipperId (FK → Shippers)
 - Origin, CropYear, Type
 - QuantityOriginal, QuantityAvailable
+- BasisCents (decimal, 11.00 = hiển thị 1100 points)
+- ShipmentDate, ShipmentDateText, SpecialSpec
 - Status (Available/Reserved/Sold)
 - LatestOfferId (FK → Offers), HVIReportId (FK → HVIReports)
 - CreatedAt, UpdatedAt

@@ -2,6 +2,30 @@
 
 All notable changes to the Cotton Broker Automation System (CBAS) will be documented in this file.
 
+## [1.3.0] - 2026-05-04
+
+### Upgraded - Quản lý Lot hàng & Tạo Output Chào Hàng
+
+#### Trang Quản lý Lot (`/lots`) — rewrite hoàn toàn
+- **23 cột đầy đủ**: STT, Lot Code, Shipper, Origin, Crop Year, Type, Spec, Shipment, QTY Orig, QTY Avail, Color, Leaf, Length, Mic, Str Min, Basis, c/kg, +Comm, Net, Status, HVI, Action
+- **ICE + Commission inputs** ở góc trên phải — thay đổi → giá tự động refresh realtime
+- **Multi-select** checkbox từng row + Select All
+- **Tạo Output Chào Hàng**: chọn nhiều lots → export Excel (nhóm theo Shipment Date, format chuẩn)
+- **HVI detail modal**: click "HVI ✓" → xem/chỉnh Mic, Length, Strength, Uniformity, Color Rd, Leaf
+- **Filter mới**: Shipment month (type=month input)
+- Basis hiển thị dạng **points** (VD: 1100, 1080)
+
+#### Lot model — thêm fields
+- `BasisCents`, `ShipmentDate`, `ShipmentDateText`, `SpecialSpec`
+- Migration `20260504070000_AddLotDisplayFields`
+- `SyncLotsAsync` copy các fields từ OfferLot → Lot khi tạo/update
+
+#### Fix: Basis = 0 cho lots cũ
+- Startup backfill: khi app khởi động, tìm lots có BasisCents=0, populate từ OfferLot data
+- Công thức giá: `(ICE + BasisCents) × 2.20462 = c/kg` ✓
+
+---
+
 ## [1.2.0] - 2026-05-04
 
 ### Added - Phase 2A: Shipper/Lot Management

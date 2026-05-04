@@ -1,6 +1,6 @@
 # Cotton Broker Automation System (CBAS) - Project Summary
 
-**Version**: 1.2.0  
+**Version**: 1.3.0  
 **Date**: 04/05/2026  
 **Status**: ✅ PRODUCTION - Deployed on Railway  
 **URL**: [cottonagent-production-92e0.up.railway.app](https://cottonagent-production-92e0.up.railway.app)
@@ -33,6 +33,14 @@ Hệ thống CBAS tự động hóa quy trình nhận Offer từ shipper và t�
 - ✅ `/offers` page — lịch sử offers, filter theo shipper/ngày
 - ✅ `/lots` page — inventory lots, filter, summary cards, thay đổi status
 - ✅ Offer Processor: dropdown chọn Shipper thay vì nhập tay
+
+### 1c. Quản lý Lot nâng cao & Tạo Output Chào Hàng
+- ✅ `/lots` page rewrite: **23 cột đầy đủ** (bao gồm HVI data, Basis points, giá c/kg realtime)
+- ✅ ICE + Commission inputs — thay đổi → giá tự động refresh
+- ✅ Multi-select lots + **Tạo Output Chào Hàng** (export Excel nhóm theo Shipment Date)
+- ✅ HVI detail modal (xem/chỉnh từ trang Lots)
+- ✅ Filter: Shipment month
+- ✅ Startup backfill: tự động populate Basis/Shipment/Spec cho lots cũ
 
 ### 2. Technical Implementation
 
@@ -144,12 +152,14 @@ CottonAgent/
 - CreatedAt
 ```
 
-### Lots Table (Phase 2A)
+### Lots Table (Phase 2A + v1.3)
 ```sql
 - Id (PK)
 - LotCode (Unique), ShipperId (FK → Shippers)
 - Origin, CropYear, Type
 - QuantityOriginal, QuantityAvailable
+- BasisCents (decimal, VD: 11.00 = 1100 points hiển thị)
+- ShipmentDate, ShipmentDateText, SpecialSpec
 - Status (Available/Reserved/Sold)
 - LatestOfferId (FK → Offers), HVIReportId (FK → HVIReports)
 - CreatedAt, UpdatedAt

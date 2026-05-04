@@ -22,157 +22,117 @@ public class BrighannParser : IShipperParser
         var result = new OfferParseResult();
         string currentOrigin = "UNKNOWN";
         string currentCropYear = "";
+        int seqNum = 0;
 
-        // Extract ICE settlements from header
+        // Pass 1: Extract ICE + date
         foreach (var row in rows)
         {
-            var iceMatch = Regex.Match(row, @"^(Jul|Dec|Mar|May)-(\d{2})\s+(\d+\.\d+)", RegexOptions.IgnoreCase);
-            if (iceMatch.Success)
-            {
-                var month = $"{iceMatch.Groups[1].Value}'{iceMatch.Groups[2].Value}";
-                if (decimal.TryParse(iceMatch.Groups[3].Value, NumberStyles.Any, CultureInfo.InvariantCulture, out var val))
-                    result.ICESettlements[month] = val;
-            }
+            var iceMatch = Regex.Match(row, @"^([A-Za-z]{3})-(\d{2})\s+(\d+\.\d+)", RegexOptions.IgnoreCase);
+            if (iceMatch.Success && decimal.TryParse(iceMatch.Groups[3].Value, NumberStyles.Any, CultureInfo.InvariantCulture, out var val))
+                result.ICESettlements[$"{iceMatch.Groups[1].Value}'{iceMatch.Groups[2].Value}"] = val;
 
             var dateMatch = Regex.Match(row, @"DAILY OFFERS\s+(\d{1,2}-[A-Za-z]+-\d{2,4})", RegexOptions.IgnoreCase);
             if (dateMatch.Success && DateTime.TryParse(dateMatch.Groups[1].Value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d))
                 result.OfferDate = DateTime.SpecifyKind(d, DateTimeKind.Utc);
         }
 
-        for (int i = 0; i < rows.Count; i++)
+        // Pass 2: Parse lots
+        foreach (var rawRow in rows)
         {
-            var row = rows[i].Trim();
+            var row = rawRow.Trim();
             if (string.IsNullOrWhiteSpace(row)) continue;
 
-            // Skip non-data rows
-            if (row.Contains("Brighann Cotton") || row.Contains("Moree") ||
-                row.Contains("marketing@") || row.Contains("Michael") ||
-                row.Contains("Ricky") || row.Contains("Neeraj") ||
-                row.Contains("DAILY OFFERS") || row.Contains("Terms") ||
-                row.Contains("Indicative") || row.Contains("ICA Rules") ||
-                row.Contains("Shipment (SO)") || row.Contains("Sight L/C") ||
-                row.Contains("Prices to be") || row.Contains("BCI +") ||
-                row.Contains("Vietnam C1%") || row.Contains("Fixation") ||
-                row.Contains("Ports") || row.Contains("Location") ||
-                row.Contains("CIF / EXW") || row.Contains("earlier"))
-                continue;
+            // Skip header/footer/meta rows
+            if (IsSkipRow(row)) continue;
 
-            // ICE settlement lines (already processed above)
-            if (Regex.IsMatch(row, @"^(Jul|Dec|Mar|May)-\d{2}\s+\d+\.\d+"))
-                continue;
+            // ICE lines already processed
+            if (Regex.IsMatch(row, @"^[A-Za-z]{3}-\d{2}\s+\d+\.\d+")) continue;
 
-            // Detect origin section
+            // Origin
             if (row == "Australia") { currentOrigin = "AUSTRALIA"; continue; }
             if (row == "Brazil") { currentOrigin = "BRAZIL"; continue; }
             if (row == "USA") { currentOrigin = "USA"; continue; }
             if (row == "India") { currentOrigin = "INDIA"; continue; }
 
-            // Crop year line
-            if (Regex.IsMatch(row, @"^\d{4}\s+Crop$"))
-            {
-                currentCropYear = Regex.Match(row, @"\d{4}").Value;
-                continue;
-            }
+            // Crop year
+            var cropMatch = Regex.Match(row, @"^(\d{4})\s+Crop$");
+            if (cropMatch.Success) { currentCropYear = cropMatch.Groups[1].Value; continue; }
 
-            // Try to parse Brighann offer line
-            // Format: "SM 37 G5 29gpt CIF 500 2,200 Dec-26 16.75 97.21 Jul-Aug S.O."
-            var lot = TryParseBrighannLine(row, offerId, currentOrigin, currentCropYear);
+            // Data row: "SM 37 G5 29gpt CIF 500 2,200 Dec-26 16.75 97.21 Jul-Aug S.O."
+            var lot = TryParseLine(row, offerId, currentOrigin, currentCropYear, ref seqNum);
             if (lot != null)
+            {
+                Console.WriteLine($"[Brighann] Parsed: {lot.LotCode} | {lot.Origin} | Basis={lot.BasisCents} | Fixed={lot.OutrightPrice} | Ship={lot.ShipmentDateText}");
                 result.Lots.Add(lot);
+            }
         }
 
         return result;
     }
 
-    private OfferLot? TryParseBrighannLine(string row, int offerId, string origin, string cropYear)
+    private bool IsSkipRow(string row)
     {
-        // Pattern: "SM 37 G5 29gpt CIF 500 2,200 Dec-26 16.75 97.21 Jul-Aug S.O."
-        // Pattern: "EMOT 31-3-36 G5 CIF 500 2,200 Jul-26 11.50 90.70 May"
-        // Pattern: "M 37 G5 28gpt CIF 500 2,200 Dec-26 8.75 89.21 Sep-Oct S.O."
-        // Pattern: "SLM 36 G5 28gpt CIF 500 2,200 Dec-26 7.75 88.21 Oct-Nov S.O."
-
-        var match = Regex.Match(row,
-            @"^(.+?)\s+CIF\s+([\d,]+)\s+([\d,]+)\s+([A-Za-z]+-\d{2})\s+(\d+\.?\d*)\s+(\d+\.?\d*)\s+(.+)$",
-            RegexOptions.IgnoreCase);
-
-        if (match.Success)
-        {
-            var spec = match.Groups[1].Value.Trim();
-            var qtyMt = decimal.Parse(match.Groups[2].Value.Replace(",", ""), CultureInfo.InvariantCulture);
-            var bales = match.Groups[3].Value.Replace(",", "");
-            var basisMonth = match.Groups[4].Value;
-            var basisCents = decimal.Parse(match.Groups[5].Value, CultureInfo.InvariantCulture);
-            var fixedPrice = decimal.Parse(match.Groups[6].Value, CultureInfo.InvariantCulture);
-            var shipmentText = match.Groups[7].Value.Trim();
-
-            var (type, specialSpec, mic, str, staple) = ParseBrighannSpec(spec);
-
-            return new OfferLot
-            {
-                OfferId = offerId,
-                LotCode = null,
-                Origin = origin,
-                CropYear = cropYear,
-                Type = type,
-                SpecialSpec = specialSpec,
-                Quantity = qtyMt,
-                QuantityText = $"{qtyMt} mt ({bales} bales)",
-                OutrightPrice = fixedPrice,
-                BasisCents = basisCents,
-                PriceCentsPerLb = fixedPrice,
-                SettlementMonth = ConvertBasisMonth(basisMonth),
-                ShipmentDateText = shipmentText,
-                ShipmentDate = ParseShipmentText(shipmentText),
-                MicronaireSpec = mic,
-                StrengthSpec = str,
-                LengthSpec = staple
-            };
-        }
-
-        return null;
+        var skips = new[] { "Brighann Cotton", "Moree", "marketing@", "Michael", "Ricky", "Neeraj",
+            "DAILY OFFERS", "Terms", "Indicative", "ICA Rules", "Shipment (SO)", "Sight L/C",
+            "Prices to be", "BCI +", "Vietnam C1", "Fixation", "Ports HCMC", "Location All",
+            "CIF / EXW", "earlier", "Ph -", "Watercourse" };
+        return skips.Any(s => row.Contains(s, StringComparison.OrdinalIgnoreCase));
     }
 
-    private (string type, string? specialSpec, string? mic, string? str, string? staple) ParseBrighannSpec(string spec)
+    private OfferLot? TryParseLine(string row, int offerId, string origin, string cropYear, ref int seq)
     {
-        string type = spec;
-        string? specialSpec = null, mic = null, str = null, staple = null;
+        // "SM 37 G5 29gpt CIF 500 2,200 Dec-26 16.75 97.21 Jul-Aug S.O."
+        // "EMOT 31-3-36 G5 CIF 500 2,200 Jul-26 11.50 90.70 May"
+        var match = Regex.Match(row,
+            @"^(.+?)\s+CIF\s+([\d,]+)\s+([\d,]+)\s+([A-Za-z]+-\d{2})\s+([\d.]+)\s+([\d.]+)\s+(.+)$");
 
-        // Extract GPT: "29gpt" or "28gpt"
-        var gptMatch = Regex.Match(spec, @"(\d+)\s*gpt", RegexOptions.IgnoreCase);
-        if (gptMatch.Success)
-        {
-            str = gptMatch.Groups[1].Value;
-            spec = spec.Replace(gptMatch.Value, "").Trim();
-        }
+        if (!match.Success) return null;
 
-        // Extract micronaire grade: "G5"
-        var micMatch = Regex.Match(spec, @"\bG(\d)\b");
-        if (micMatch.Success)
-        {
-            mic = micMatch.Value;
-            spec = spec.Replace(micMatch.Value, "").Trim();
-        }
+        var spec = match.Groups[1].Value.Trim();
+        var qtyMt = decimal.Parse(match.Groups[2].Value.Replace(",", ""), CultureInfo.InvariantCulture);
+        var bales = match.Groups[3].Value.Replace(",", "");
+        var basisMonth = match.Groups[4].Value;
+        var basisValue = decimal.Parse(match.Groups[5].Value, CultureInfo.InvariantCulture);
+        var fixedPrice = decimal.Parse(match.Groups[6].Value, CultureInfo.InvariantCulture);
+        var shipmentText = match.Groups[7].Value.Trim();
 
-        // Extract staple: "37", "36", "31-3-36"
-        var stapleMatch = Regex.Match(spec, @"\b(\d{1,2}-\d-\d{2}|\d{2})\b");
-        if (stapleMatch.Success)
-        {
-            staple = stapleMatch.Value;
-            spec = spec.Replace(stapleMatch.Value, "").Trim();
-        }
-
-        // Type is what's left
-        type = spec.Trim();
+        // Parse spec components
+        string? mic = null, str = null, staple = null;
+        var gptM = Regex.Match(spec, @"(\d+)\s*gpt", RegexOptions.IgnoreCase);
+        if (gptM.Success) { str = gptM.Groups[1].Value; spec = spec.Replace(gptM.Value, "").Trim(); }
+        var micM = Regex.Match(spec, @"\bG(\d)\b");
+        if (micM.Success) { mic = micM.Value; spec = spec.Replace(micM.Value, "").Trim(); }
+        // Staple: "31-3-36" or "37" or "36"
+        var stplM = Regex.Match(spec, @"\b(\d{1,2}-\d+-\d{2}|\d{2})\b");
+        if (stplM.Success) { staple = stplM.Value; spec = spec.Replace(stplM.Value, "").Trim(); }
+        var type = spec.Trim();
         if (string.IsNullOrEmpty(type)) type = "Cotton";
 
-        return (type, specialSpec, mic, str, staple);
-    }
+        // Generate LotCode: "BR-SM37-G5-001"
+        seq++;
+        var originCode = origin switch { "AUSTRALIA" => "AU", "BRAZIL" => "BR", "USA" => "US", _ => origin[..2] };
+        var lotCode = $"{originCode}-{type.Replace(" ", "")}{staple ?? ""}-{seq:D3}";
 
-    private string ConvertBasisMonth(string basisMonth)
-    {
-        // "Dec-26" → "Dec'26"
-        var m = Regex.Match(basisMonth, @"([A-Za-z]+)-(\d{2})");
-        return m.Success ? $"{m.Groups[1].Value}'{m.Groups[2].Value}" : basisMonth;
+        return new OfferLot
+        {
+            OfferId = offerId,
+            LotCode = lotCode,
+            Origin = origin,
+            CropYear = cropYear,
+            Type = type,
+            SpecialSpec = $"{mic} {str}gpt".Trim(),
+            Quantity = qtyMt,
+            QuantityText = $"{qtyMt} mt ({bales} bales)",
+            OutrightPrice = fixedPrice,
+            BasisCents = basisValue,
+            PriceCentsPerLb = fixedPrice,
+            SettlementMonth = Regex.Replace(basisMonth, @"([A-Za-z]+)-(\d{2})", "$1'$2"),
+            ShipmentDateText = shipmentText,
+            ShipmentDate = ParseShipmentText(shipmentText),
+            MicronaireSpec = mic,
+            StrengthSpec = str,
+            LengthSpec = staple
+        };
     }
 
     private DateTime? ParseShipmentText(string? text)
@@ -182,8 +142,6 @@ public class BrighannParser : IShipperParser
             ["Jan"]=1,["Feb"]=2,["Mar"]=3,["Apr"]=4,["May"]=5,["Jun"]=6,
             ["Jul"]=7,["Aug"]=8,["Sep"]=9,["Oct"]=10,["Nov"]=11,["Dec"]=12
         };
-
-        // "Jul-Aug S.O." or "May" or "Sep-Oct S.O."
         var match = Regex.Match(text, @"([A-Za-z]{3})");
         if (match.Success && months.TryGetValue(match.Value, out var m))
         {

@@ -89,18 +89,15 @@
                         <th>Shipper</th>
                         <th>Origin</th>
                         <th>Crop Year</th>
-                        <th>Type</th>
-                        <th>Spec</th>
-                        <th>Shipment</th>
+                        <th>Type / Spec</th>
+                        <th>Shipment / ETA</th>
                         <th class="text-end">QTY Orig</th>
                         <th class="text-end">QTY Avail</th>
-                        <th>Color</th>
-                        <th>Leaf</th>
-                        <th>Length</th>
                         <th>Mic</th>
-                        <th>Str Min</th>
+                        <th>Len</th>
+                        <th>GPT</th>
                         <th class="text-end">Basis</th>
-                        <th class="text-end">c/kg</th>
+                        <th class="text-end">Giá c/kg</th>
                         <th class="text-end">+Comm</th>
                         <th class="text-end">Net</th>
                         <th class="text-center">Status</th>
@@ -111,11 +108,11 @@
                 <tbody>
                     @if (lots == null)
                     {
-                        <tr><td colspan="23" class="text-center py-3">Đang tải...</td></tr>
+                        <tr><td colspan="20" class="text-center py-3">Đang tải...</td></tr>
                     }
                     else if (!lots.Any())
                     {
-                        <tr><td colspan="23" class="text-center py-3 text-muted">Không có lot nào</td></tr>
+                        <tr><td colspan="20" class="text-center py-3 text-muted">Không có lot nào</td></tr>
                     }
                     else
                     {
@@ -123,25 +120,22 @@
                         @foreach (var lot in lots)
                         {
                             var hvi = lot.HVIReport;
-                            var priceCkg = CalcPriceCkg(lot.BasisCents);
+                            var priceCkg = CalcPriceCkg(lot);
                             var priceComm = priceCkg - commissionPercent;
                             var priceNet = priceComm;
                             <tr class="@(selectedLotIds.Contains(lot.Id) ? "table-info" : "")">
                                 <td><input type="checkbox" checked="@selectedLotIds.Contains(lot.Id)" @onchange="e => ToggleLot(lot.Id, (bool)(e.Value ?? false))" /></td>
                                 <td>@(stt++)</td>
                                 <td><strong>@lot.LotCode</strong></td>
-                                <td>@lot.Shipper.Name</td>
+                                <td>@lot.Shipper?.Name</td>
                                 <td>@lot.Origin</td>
                                 <td>@lot.CropYear</td>
-                                <td>@lot.Type</td>
-                                <td>@lot.SpecialSpec</td>
+                                <td>@lot.Type @lot.SpecialSpec</td>
                                 <td>@lot.ShipmentDateText</td>
                                 <td class="text-end">@lot.QuantityOriginal.ToString("F0")</td>
                                 <td class="text-end">@lot.QuantityAvailable.ToString("F0")</td>
-                                <td>@(hvi?.ColorRd?.ToString("F0") ?? hvi?.ColorGrade)</td>
-                                <td>@hvi?.Leaf?.ToString("F1")</td>
-                                <td>@hvi?.Length?.ToString("F2")</td>
                                 <td>@hvi?.Micronaire?.ToString("F2")</td>
+                                <td>@hvi?.Length?.ToString("F2")</td>
                                 <td>@hvi?.StrengthGPT?.ToString("F1")</td>
                                 <td class="text-end">@((lot.BasisCents * 100m).ToString("F0"))</td>
                                 <td class="text-end fw-bold">@priceCkg.ToString("F2")</td>
@@ -253,8 +247,11 @@
         await LoadLots();
     }
 
-    private decimal CalcPriceCkg(decimal basisCents)
-        => Math.Round((iceValue + basisCents) * LB_TO_KG, 2);
+    private decimal CalcPriceCkg(Lot lot)
+    {
+        var centsPerLb = lot.OutrightPrice > 0 ? lot.OutrightPrice : (iceValue + lot.BasisCents);
+        return Math.Round(centsPerLb * LB_TO_KG, 2);
+    }
 
     private async Task LoadLots()
     {
@@ -369,7 +366,7 @@
                 Rows = g.Select((l, idx) =>
                 {
                     var hvi = l.HVIReport;
-                    var priceCkg = CalcPriceCkg(l.BasisCents);
+                    var priceCkg = CalcPriceCkg(l);
                     return new OutputRowDto
                     {
                         STT = idx + 1,

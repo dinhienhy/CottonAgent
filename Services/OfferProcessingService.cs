@@ -2,6 +2,7 @@ using CBAS.Web.Data;
 using CBAS.Web.DTOs;
 using CBAS.Web.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 using System.Text.Json;
 
 namespace CBAS.Web.Services;
@@ -308,7 +309,6 @@ public class OfferProcessingService : IOfferProcessingService
 
             if (lot == null)
             {
-                // Create new Lot
                 lot = new Lot
                 {
                     LotCode = offerLot.LotCode,
@@ -319,6 +319,7 @@ public class OfferProcessingService : IOfferProcessingService
                     QuantityOriginal = offerLot.Quantity,
                     QuantityAvailable = offerLot.Quantity,
                     BasisCents = offerLot.BasisCents,
+                    OutrightPrice = offerLot.OutrightPrice,
                     ShipmentDate = offerLot.ShipmentDate,
                     ShipmentDateText = offerLot.ShipmentDateText,
                     SpecialSpec = offerLot.SpecialSpec,
@@ -332,9 +333,9 @@ public class OfferProcessingService : IOfferProcessingService
             }
             else
             {
-                // Update existing Lot — quantity from latest offer replaces old
                 lot.QuantityAvailable = offerLot.Quantity;
                 lot.BasisCents = offerLot.BasisCents;
+                lot.OutrightPrice = offerLot.OutrightPrice;
                 lot.ShipmentDate = offerLot.ShipmentDate;
                 lot.ShipmentDateText = offerLot.ShipmentDateText;
                 lot.SpecialSpec = offerLot.SpecialSpec;
@@ -344,16 +345,43 @@ public class OfferProcessingService : IOfferProcessingService
                 if (!string.IsNullOrEmpty(offerLot.CropYear)) lot.CropYear = offerLot.CropYear;
             }
 
-            // Link OfferLot → Lot
             offerLot.MasterLotId = lot.Id;
 
-            // Link HVIReport → Lot if exists
+            // Auto-create/update HVIReport from parsed spec data (Olam/Brighann)
             var hvi = await _context.HVIReports.FirstOrDefaultAsync(h => h.LotCode == offerLot.LotCode);
-            if (hvi != null)
+            if (hvi == null)
             {
-                hvi.MasterLotId = lot.Id;
-                lot.HVIReportId = hvi.HVIId;
+                hvi = new HVIReport
+                {
+                    LotCode = offerLot.LotCode,
+                    FileName = $"parsed-{offerLot.LotCode}",
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.HVIReports.Add(hvi);
             }
+
+            // Fill HVI from parsed spec if not already set
+            if (!hvi.Micronaire.HasValue && !string.IsNullOrEmpty(offerLot.MicronaireSpec))
+            {
+                if (decimal.TryParse(offerLot.MicronaireSpec, NumberStyles.Any, CultureInfo.InvariantCulture, out var mic))
+                    hvi.Micronaire = mic;
+            }
+            if (!hvi.Length.HasValue && !string.IsNullOrEmpty(offerLot.LengthSpec))
+            {
+                if (decimal.TryParse(offerLot.LengthSpec, NumberStyles.Any, CultureInfo.InvariantCulture, out var len))
+                    hvi.Length = len;
+            }
+            if (!hvi.StrengthGPT.HasValue && !string.IsNullOrEmpty(offerLot.StrengthSpec))
+            {
+                if (decimal.TryParse(offerLot.StrengthSpec, NumberStyles.Any, CultureInfo.InvariantCulture, out var str))
+                    hvi.StrengthGPT = str;
+            }
+            if (!string.IsNullOrEmpty(offerLot.CropYear))
+                hvi.CropYear = offerLot.CropYear;
+
+            await _context.SaveChangesAsync();
+            hvi.MasterLotId = lot.Id;
+            lot.HVIReportId = hvi.HVIId;
         }
 
         await _context.SaveChangesAsync();
@@ -456,9 +484,9 @@ public class OfferProcessingService : IOfferProcessingService
             if (!string.IsNullOrEmpty(lot.LotCode))
                 hviDict.TryGetValue(lot.LotCode, out hvi);
 
-            // Price calculation: outright (c/lb) is already ICE + basis
-            var outrightCentsPerLb = lot.OutrightPrice > 0 ? lot.OutrightPrice : (iceValue + lot.BasisCents);
-            var priceCentsPerKg = Math.Round(outrightCentsPerLb * LB_TO_KG, 2);
+            // Price: use FixedPrice if available, otherwise ICE + BasisCents
+            var centsPerLb = lot.OutrightPrice > 0 ? lot.OutrightPrice : (iceValue + lot.BasisCents);
+            var priceCentsPerKg = Math.Round(centsPerLb * LB_TO_KG, 2);
             var commission = offer.CommissionPercent;
             var priceWithCommission = Math.Round(priceCentsPerKg - commission, 2);
             var netPrice = priceWithCommission;

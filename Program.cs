@@ -128,6 +128,7 @@ using (var scope = app.Services.CreateScope())
             if (offerLot != null)
             {
                 lot.BasisCents = offerLot.BasisCents;
+                lot.OutrightPrice = offerLot.OutrightPrice;
                 lot.ShipmentDate = offerLot.ShipmentDate;
                 lot.ShipmentDateText = offerLot.ShipmentDateText;
                 lot.SpecialSpec = offerLot.SpecialSpec;

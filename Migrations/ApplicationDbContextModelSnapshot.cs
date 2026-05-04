@@ -63,6 +63,7 @@ namespace CBAS.Web.Migrations
                     b.Property<decimal>("QuantityAvailable").HasColumnType("numeric(10,2)");
                     b.Property<decimal>("QuantityOriginal").HasColumnType("numeric(10,2)");
                     b.Property<decimal>("BasisCents").HasColumnType("numeric(10,2)");
+                    b.Property<decimal>("OutrightPrice").HasColumnType("numeric(10,2)");
                     b.Property<DateTime?>("ShipmentDate").HasColumnType("timestamp with time zone");
                     b.Property<string>("ShipmentDateText").HasMaxLength(100).HasColumnType("character varying(100)");
                     b.Property<string>("SpecialSpec").HasMaxLength(500).HasColumnType("character varying(500)");

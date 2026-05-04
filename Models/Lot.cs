@@ -35,6 +35,9 @@ public class Lot
     [Column(TypeName = "decimal(10,2)")]
     public decimal BasisCents { get; set; }
 
+    [Column(TypeName = "decimal(10,2)")]
+    public decimal OutrightPrice { get; set; }
+
     public DateTime? ShipmentDate { get; set; }
 
     [MaxLength(100)]

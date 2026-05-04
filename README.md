@@ -1,6 +1,6 @@
 # Cotton Broker Automation System (CBAS)
 
-Hệ thống Tự động Xử lý Offer Bông - Version 1.1
+Hệ thống Tự động Xử lý Offer Bông - Version 1.2
 
 ## Tổng quan
 
@@ -69,7 +69,7 @@ Truy cập: https://localhost:5001
 1. Login (admin / admin123)
 2. Truy cập trang "Offer Processor"
 3. Nhập thông tin:
-   - Supplier Name (mặc định: Toyoshima)
+   - Chọn Shipper từ dropdown (cần tạo trước tại `/shippers`)
    - ICE Value (mặc định: 84.19)
    - Commission % (mặc định: 2.00)
 4. Upload 1 file Offer PDF
@@ -108,18 +108,49 @@ Giá (c/kg) = 95.19 × 2.20462 = 209.86 c/kg
 Giá net = 209.86 - 2.00 = 207.86 c/kg
 ```
 
+## Quản lý Shipper / Lot (Phase 2A)
+
+### Shippers (`/shippers`)
+- Thêm/sửa/bật/tắt shipper
+- Khi upload Offer, hệ thống tự tạo Shipper nếu chưa tồn tại
+
+### Offers (`/offers`)
+- Xem lịch sử tất cả offers
+- Filter theo shipper, ngày
+
+### Lots (`/lots`)
+- Xem inventory lots với QuantityAvailable và Status
+- Filter theo shipper, origin, status, lot code
+- Summary cards: Available / Reserved / Sold / Tổng QTY
+- Thay đổi status: Reserve, Sold, Reopen
+- Auto-sync: khi upload Offer mới, tự tạo/update Lot
+
 ## Cấu trúc Database
+
+### Bảng Shippers (Phase 2A)
+- ShipperId (PK), Name (Unique)
+- ContactInfo, Email, Phone, Notes, IsActive, CreatedAt
 
 ### Bảng Offers
 - OfferId (PK)
 - OfferDate, SupplierName, FileName
+- ShipperId (FK → Shippers, nullable)
 - ICEValue, CommissionPercent
 - ICESettlementsJson (JSON string chứa các ICE settlement months)
 - CreatedAt
 
+### Bảng Lots (Phase 2A)
+- Id (PK), LotCode (Unique), ShipperId (FK → Shippers)
+- Origin, CropYear, Type
+- QuantityOriginal, QuantityAvailable
+- Status (Available/Reserved/Sold)
+- LatestOfferId (FK → Offers), HVIReportId (FK → HVIReports)
+- CreatedAt, UpdatedAt
+
 ### Bảng OfferLots
 - LotId (PK), OfferId (FK)
 - LotCode (nullable - generic lines không có lot code)
+- MasterLotId (FK → Lots, nullable)
 - Origin, CropYear, Quantity, QuantityText, Type
 - BasisCents (basis tính bằng cents, không phải points)
 - OutrightPrice, SettlementMonth, ShipmentDateText
@@ -127,7 +158,7 @@ Giá net = 209.86 - 2.00 = 207.86 c/kg
 - PriceCentsPerLb
 
 ### Bảng HVIReports
-- HVIId (PK), LotCode (Unique), FileName
+- HVIId (PK), LotCode (Unique), MasterLotId (FK → Lots, nullable), FileName
 - Micronaire, Length, StrengthGPT, Uniformity
 - ColorRd, ColorGrade, Leaf
 - CropYear, TotalBales, RawDataJson, CreatedAt

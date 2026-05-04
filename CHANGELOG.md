@@ -2,6 +2,34 @@
 
 All notable changes to the Cotton Broker Automation System (CBAS) will be documented in this file.
 
+## [1.2.0] - 2026-05-04
+
+### Added - Phase 2A: Shipper/Lot Management
+
+#### New Models
+- `Shipper` entity — quản lý nhà cung cấp (Name unique, ContactInfo, Email, Phone, IsActive)
+- `Lot` master entity — quản lý lô hàng (LotCode unique, QuantityOriginal, QuantityAvailable, Status: Available/Reserved/Sold)
+
+#### Updated Models
+- `Offer` → thêm `ShipperId` FK liên kết Shipper
+- `OfferLot` → thêm `MasterLotId` FK liên kết Lot master
+- `HVIReport` → thêm `MasterLotId` FK liên kết Lot master
+
+#### Auto-sync Logic (OfferProcessingService)
+- Upload Offer → tự động tìm/tạo Shipper từ SupplierName, gán vào Offer
+- Recalculate → `SyncLotsAsync`: tìm/tạo Lot cho mỗi LotCode, update QuantityAvailable, link OfferLot→Lot, link HVIReport→Lot
+
+#### New Pages
+- `/shippers` — CRUD quản lý shipper (thêm/sửa/bật/tắt)
+- `/offers` — Lịch sử offers (filter theo shipper, ngày)
+- `/lots` — Inventory lots (filter shipper/origin/status/lotcode, summary cards, thay đổi status)
+
+#### UI Improvements
+- Offer Processor: thay InputText SupplierName bằng dropdown chọn Shipper từ DB
+- NavMenu: thêm links Lots, Offers, Shippers
+
+---
+
 ## [1.1.0] - 2026-05-04
 
 ### Added - Phase 2: OCR & Parser Rewrite

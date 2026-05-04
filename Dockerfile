@@ -23,9 +23,15 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     tesseract-ocr \
     tesseract-ocr-eng \
+    libtesseract-dev \
     libleptonica-dev \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && echo "=== Tesseract version ===" && tesseract --version \
+    && echo "=== tessdata location ===" && find /usr/share -name "eng.traineddata" 2>/dev/null \
+    && echo "=== native libs ===" && ldconfig -p | grep -E "tesseract|lept"
 
+# Set TESSDATA_PREFIX to the directory containing eng.traineddata
+# Debian Bookworm: /usr/share/tesseract-ocr/5/tessdata
 ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
 
 COPY --from=publish /app/publish .

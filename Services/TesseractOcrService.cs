@@ -57,9 +57,23 @@ public class TesseractOcrService : IOcrService
                 float totalConfidence = 0;
                 int pageCount = 0;
 
-                using var engine = new TesseractEngine(_tessDataPath!, "eng", EngineMode.Default);
-                // Optimize for tabular data
-                engine.SetVariable("preserve_interword_spaces", "1");
+                _logger.LogInformation("Initializing Tesseract engine with tessdata path: {Path}", _tessDataPath);
+                TesseractEngine engine;
+                try
+                {
+                    engine = new TesseractEngine(_tessDataPath!, "eng", EngineMode.Default);
+                    engine.SetVariable("preserve_interword_spaces", "1");
+                }
+                catch (Exception initEx)
+                {
+                    var initInner = initEx.InnerException?.Message ?? initEx.Message;
+                    _logger.LogError(initEx, "Tesseract engine init failed: {Msg}", initInner);
+                    return new OcrResult
+                    {
+                        Success = false,
+                        ErrorMessage = $"Tesseract engine không khởi tạo được: {initInner}"
+                    };
+                }
 
                 foreach (var imgBytes in imageBytes)
                 {
@@ -80,7 +94,9 @@ public class TesseractOcrService : IOcrService
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning("OCR failed on image: {Error}", ex.Message);
+                        var inner = ex.InnerException?.Message ?? ex.Message;
+                        _logger.LogWarning("OCR failed on image ({Size} bytes): {Error} | Inner: {Inner}",
+                            imgBytes.Length, ex.Message, inner);
                     }
                 }
 
@@ -93,8 +109,10 @@ public class TesseractOcrService : IOcrService
                     };
                 }
 
+                engine.Dispose();
+
                 var rawText = allText.ToString();
-                var avgConfidence = totalConfidence / pageCount;
+                var avgConfidence = pageCount > 0 ? totalConfidence / pageCount : 0;
 
                 // Step 3: Parse HVI fields from OCR text
                 var result = ParseHVIFromOcrText(rawText);
@@ -109,11 +127,12 @@ public class TesseractOcrService : IOcrService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "OCR error for {File}", fileName);
+                var innerMsg = ex.InnerException?.Message ?? ex.Message;
+                _logger.LogError(ex, "OCR error for {File}: {Inner}", fileName, innerMsg);
                 return new OcrResult
                 {
                     Success = false,
-                    ErrorMessage = $"Lỗi OCR: {ex.Message}"
+                    ErrorMessage = $"Lỗi OCR: {innerMsg}"
                 };
             }
         });
@@ -135,12 +154,23 @@ public class TesseractOcrService : IOcrService
                 {
                     try
                     {
-                        var rawBytes = image.RawBytes.ToArray();
-                        if (rawBytes.Length > 1000) // Skip tiny images (icons, etc.)
+                        // TryGetPng decodes the PDF-internal format to standard PNG
+                        if (image.TryGetPng(out var pngBytes) && pngBytes.Length > 1000)
                         {
-                            images.Add(rawBytes);
-                            _logger.LogInformation("Extracted image: {Size} bytes, {W}x{H}",
-                                rawBytes.Length, image.WidthInSamples, image.HeightInSamples);
+                            images.Add(pngBytes);
+                            _logger.LogInformation("Extracted PNG image: {Size} bytes, {W}x{H}",
+                                pngBytes.Length, image.WidthInSamples, image.HeightInSamples);
+                        }
+                        else
+                        {
+                            // Fallback: try raw bytes (works for embedded JPEG)
+                            var rawBytes = image.RawBytes.ToArray();
+                            if (rawBytes.Length > 1000)
+                            {
+                                images.Add(rawBytes);
+                                _logger.LogInformation("Extracted raw image: {Size} bytes, {W}x{H}",
+                                    rawBytes.Length, image.WidthInSamples, image.HeightInSamples);
+                            }
                         }
                     }
                     catch (Exception ex)

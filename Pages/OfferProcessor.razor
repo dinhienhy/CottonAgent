@@ -11,11 +11,21 @@
 <div class="container-fluid mt-4">
     <h2 class="mb-4">Hệ thống Xử lý Offer Bông</h2>
 
-    @if (!isProcessed)
+    @* ── Step indicator ── *@
+    <div class="d-flex align-items-center mb-4">
+        <span class="badge rounded-pill @(currentStep == 1 ? "bg-primary" : "bg-secondary") px-3 py-2 me-2">1. Upload</span>
+        <i class="bi bi-arrow-right me-2"></i>
+        <span class="badge rounded-pill @(currentStep == 2 ? "bg-primary" : "bg-secondary") px-3 py-2 me-2">2. Review HVI</span>
+        <i class="bi bi-arrow-right me-2"></i>
+        <span class="badge rounded-pill @(currentStep == 3 ? "bg-primary" : "bg-secondary") px-3 py-2">3. Kết quả</span>
+    </div>
+
+    @* ══════════════════════ STEP 1: UPLOAD ══════════════════════ *@
+    @if (currentStep == 1)
     {
         <div class="card">
             <div class="card-header bg-primary text-white">
-                <h5 class="mb-0">Upload Files</h5>
+                <h5 class="mb-0">Bước 1: Upload Files</h5>
             </div>
             <div class="card-body">
                 <EditForm Model="@uploadModel" OnValidSubmit="@HandleUpload">
@@ -56,32 +66,259 @@
                         }
                     </div>
 
-                    <button type="submit" class="btn btn-success" disabled="@isProcessing">
+                    <button type="submit" class="btn btn-success btn-lg" disabled="@isProcessing">
                         @if (isProcessing)
                         {
                             <span class="spinner-border spinner-border-sm me-2"></span>
-                            <text>Processing...</text>
+                            <text>Đang xử lý...</text>
                         }
                         else
                         {
-                            <text>Process Offer</text>
+                            <text>Phân tích Offer →</text>
                         }
                     </button>
                 </EditForm>
             </div>
         </div>
     }
-    else
+
+    @* ══════════════════════ STEP 2: HVI REVIEW ══════════════════════ *@
+    @if (currentStep == 2)
+    {
+        <div class="card">
+            <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Bước 2: Kiểm tra & Nhập dữ liệu HVI (@hviInputs.Count lot)</h5>
+                <div>
+                    @if (hviFileStreams.Any())
+                    {
+                        <button class="btn btn-info btn-sm me-2" @onclick="RunOcrForAll" disabled="@isRunningOcr">
+                            @if (isRunningOcr)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1"></span>
+                                <text>OCR đang chạy... (@ocrProgress/@hviInputs.Count)</text>
+                            }
+                            else
+                            {
+                                <text>🔍 Chạy OCR tất cả</text>
+                            }
+                        </button>
+                    }
+                    <button class="btn btn-outline-dark btn-sm" @onclick="SkipHVIReview">
+                        Bỏ qua HVI →
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info mb-3">
+                    <strong>Lưu ý:</strong> HVI PDF là file scan (ảnh). Hệ thống hỗ trợ OCR tự động (Tesseract).
+                    Bạn <strong>bắt buộc kiểm tra & chỉnh sửa</strong> kết quả OCR trước khi lưu.
+                    Nếu OCR không tốt, chọn "Nhập tay" để nhập từ đầu.
+                </div>
+
+                @for (int i = 0; i < hviInputs.Count; i++)
+                {
+                    var idx = i;
+                    var hvi = hviInputs[idx];
+                    var borderClass = hvi.OcrStatus == OcrStatus.Success ? "border-info" :
+                                      hvi.HasData ? "border-success" : "border-warning";
+                    var headerClass = hvi.OcrStatus == OcrStatus.Success ? "bg-info text-white" :
+                                      hvi.HasData ? "bg-success text-white" : "bg-light";
+                    <div class="card mb-3 @borderClass">
+                        <div class="card-header d-flex justify-content-between align-items-center @headerClass">
+                            <div>
+                                <strong>Lot: @hvi.LotCode</strong>
+                                @if (!string.IsNullOrEmpty(hvi.FileName))
+                                {
+                                    <small class="ms-2 opacity-75">(@hvi.FileName)</small>
+                                }
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                @* OCR Status Badge *@
+                                @switch (hvi.OcrStatus)
+                                {
+                                    case OcrStatus.Success:
+                                        <span class="badge bg-light text-info" title="Confidence: @(hvi.ConfidenceScore * 100):F0%">
+                                            🔍 OCR @((hvi.ConfidenceScore * 100).ToString("F0"))%
+                                        </span>
+                                        break;
+                                    case OcrStatus.Failed:
+                                        <span class="badge bg-danger" title="@hvi.OcrErrorMessage">✗ OCR lỗi</span>
+                                        break;
+                                    case OcrStatus.Processing:
+                                        <span class="badge bg-secondary">
+                                            <span class="spinner-border spinner-border-sm" style="width:0.7rem;height:0.7rem"></span> OCR...
+                                        </span>
+                                        break;
+                                }
+
+                                @* Data Status Badge *@
+                                @if (hvi.HasData)
+                                {
+                                    <span class="badge bg-light text-success">✓ Có dữ liệu</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-warning text-dark">Chưa nhập</span>
+                                }
+
+                                <button class="btn btn-sm @(expandedLots.Contains(hvi.LotCode) ? "btn-outline-secondary" : "btn-outline-primary")"
+                                        @onclick="() => ToggleLotExpand(hvi.LotCode)">
+                                    @(expandedLots.Contains(hvi.LotCode) ? "Thu gọn ▲" : "Mở rộng ▼")
+                                </button>
+                            </div>
+                        </div>
+
+                        @if (expandedLots.Contains(hvi.LotCode))
+                        {
+                            <div class="card-body">
+                                @* OCR action buttons *@
+                                @if (hviFileStreams.ContainsKey(hvi.LotCode))
+                                {
+                                    <div class="mb-3 d-flex gap-2">
+                                        <button class="btn btn-outline-info btn-sm" @onclick="() => RunOcrForSingleLot(idx)"
+                                                disabled="@(hvi.OcrStatus == OcrStatus.Processing)">
+                                            🔍 Chạy OCR
+                                        </button>
+                                        <button class="btn btn-outline-secondary btn-sm" @onclick="() => ClearLotData(idx)">
+                                            🗑 Xóa & Nhập tay
+                                        </button>
+                                        @if (!string.IsNullOrEmpty(hvi.RawOcrText))
+                                        {
+                                            <button class="btn btn-outline-dark btn-sm" @onclick="() => ToggleRawText(hvi.LotCode)">
+                                                @(showRawText.Contains(hvi.LotCode) ? "Ẩn raw text" : "Xem raw OCR text")
+                                            </button>
+                                        }
+                                    </div>
+                                }
+
+                                @* Raw OCR text display *@
+                                @if (showRawText.Contains(hvi.LotCode) && !string.IsNullOrEmpty(hvi.RawOcrText))
+                                {
+                                    <div class="mb-3 p-2 bg-dark text-light rounded" style="max-height:200px;overflow-y:auto;font-size:0.8rem;font-family:monospace;white-space:pre-wrap;">@hvi.RawOcrText</div>
+                                }
+
+                                @* OCR error message *@
+                                @if (hvi.OcrStatus == OcrStatus.Failed && !string.IsNullOrEmpty(hvi.OcrErrorMessage))
+                                {
+                                    <div class="alert alert-warning alert-sm py-1 px-2 mb-3">
+                                        <small>⚠ @hvi.OcrErrorMessage — Vui lòng nhập tay.</small>
+                                    </div>
+                                }
+
+                                @* HVI data input fields *@
+                                <div class="row g-3">
+                                    <div class="col-md-3">
+                                        <label class="form-label fw-bold">Micronaire (Mic)</label>
+                                        <input type="number" step="0.01" class="form-control"
+                                               value="@hvi.Micronaire" @onchange="e => hvi.Micronaire = ParseDecimal(e.Value)" />
+                                        <small class="text-muted">VD: 4.47</small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label fw-bold">Chiều dài (Len)</label>
+                                        <input type="number" step="0.01" class="form-control"
+                                               value="@hvi.Length" @onchange="e => hvi.Length = ParseDecimal(e.Value)" />
+                                        <small class="text-muted">VD: 112.87</small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label fw-bold">Cường lực (GPT)</label>
+                                        <input type="number" step="0.01" class="form-control"
+                                               value="@hvi.StrengthGPT" @onchange="e => hvi.StrengthGPT = ParseDecimal(e.Value)" />
+                                        <small class="text-muted">VD: 30.84</small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label fw-bold">Uniformity (Unif)</label>
+                                        <input type="number" step="0.01" class="form-control"
+                                               value="@hvi.Uniformity" @onchange="e => hvi.Uniformity = ParseDecimal(e.Value)" />
+                                        <small class="text-muted">VD: 81.33</small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label fw-bold">Màu sắc (Rd)</label>
+                                        <input type="number" step="0.01" class="form-control"
+                                               value="@hvi.ColorRd" @onchange="e => hvi.ColorRd = ParseDecimal(e.Value)" />
+                                        <small class="text-muted">VD: 74.67</small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">Color Grade</label>
+                                        <input type="text" class="form-control"
+                                               value="@hvi.ColorGrade" @onchange="e => hvi.ColorGrade = e.Value?.ToString()" />
+                                        <small class="text-muted">VD: 41-1</small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label fw-bold">Tạp lá (Leaf)</label>
+                                        <input type="number" step="0.01" class="form-control"
+                                               value="@hvi.Leaf" @onchange="e => hvi.Leaf = ParseDecimal(e.Value)" />
+                                        <small class="text-muted">VD: 3.32</small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">Crop Year</label>
+                                        <input type="text" class="form-control"
+                                               value="@hvi.CropYear" @onchange="e => hvi.CropYear = e.Value?.ToString()" />
+                                        <small class="text-muted">VD: 2025</small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">Total Bales</label>
+                                        <input type="number" class="form-control"
+                                               value="@hvi.TotalBales" @onchange="e => hvi.TotalBales = ParseInt(e.Value)" />
+                                        <small class="text-muted">VD: 1798</small>
+                                    </div>
+                                    <div class="col-md-9">
+                                        <label class="form-label">Ghi chú</label>
+                                        <input type="text" class="form-control"
+                                               value="@hvi.Notes" @onchange="e => hvi.Notes = e.Value?.ToString()" />
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+
+                @if (hviInputs.Count == 0)
+                {
+                    <div class="alert alert-secondary">
+                        Không có lot nào cần nhập HVI (tất cả là generic offer lines).
+                    </div>
+                }
+
+                <div class="d-flex justify-content-between mt-3">
+                    <button class="btn btn-secondary" @onclick="GoBackToStep1">
+                        ← Quay lại
+                    </button>
+                    <div>
+                        <button class="btn btn-outline-primary me-2" @onclick="ExpandAllLots">
+                            Mở tất cả
+                        </button>
+                        <button class="btn btn-success btn-lg" @onclick="SaveHVIAndCalculate" disabled="@isSaving">
+                            @if (isSaving)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                                <text>Đang lưu...</text>
+                            }
+                            else
+                            {
+                                <text>Lưu HVI & Tính toán →</text>
+                            }
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* ══════════════════════ STEP 3: RESULTS ══════════════════════ *@
+    @if (currentStep == 3)
     {
         <div class="card">
             <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">Processed Output</h5>
+                <h5 class="mb-0">Bước 3: Kết quả xử lý</h5>
                 <div>
+                    <button class="btn btn-light btn-sm me-2" @onclick="GoBackToHVIReview">
+                        ← Sửa HVI
+                    </button>
                     <button class="btn btn-light btn-sm me-2" @onclick="ExportToExcel">
                         <i class="bi bi-file-earmark-excel"></i> Export Excel
                     </button>
                     <button class="btn btn-secondary btn-sm" @onclick="ResetForm">
-                        <i class="bi bi-arrow-clockwise"></i> New Offer
+                        <i class="bi bi-arrow-clockwise"></i> Offer mới
                     </button>
                 </div>
             </div>
@@ -123,19 +360,19 @@
                                             <td>@row.STT</td>
                                             <td>@row.Origin</td>
                                             <td>@row.CropYear</td>
-                                            <td>@row.Quantity.ToString("N2")</td>
+                                            <td>@(row.QuantityText ?? row.Quantity.ToString("N0") + " mt")</td>
                                             <td>@row.Type</td>
                                             <td>@row.SpecialSpec</td>
                                             <td>@row.Color</td>
                                             <td>@(row.Leaf?.ToString("N2"))</td>
-                                            <td>@(row.Length?.ToString("N2"))</td>
-                                            <td>@(row.Micronaire?.ToString("N2"))</td>
-                                            <td>@(row.StrengthMin?.ToString("N2"))</td>
-                                            <td>@row.Basis.ToString("N2")</td>
-                                            <td>@(row.ShipmentDate?.ToString("dd/MM/yyyy"))</td>
-                                            <td>@row.PriceCentsPerKg.ToString("N4")</td>
-                                            <td>@row.PriceWithCommission.ToString("N4")</td>
-                                            <td>@row.NetPrice.ToString("N4")</td>
+                                            <td>@(row.Length?.ToString("N0"))</td>
+                                            <td>@(row.MicronaireText ?? row.Micronaire?.ToString("N2"))</td>
+                                            <td>@(row.StrengthText ?? row.StrengthMin?.ToString("N2"))</td>
+                                            <td>@row.Basis.ToString("N0")</td>
+                                            <td>@(row.ShipmentDateText ?? row.ShipmentDate?.ToString("M/yyyy") + " SO")</td>
+                                            <td>@row.PriceCentsPerKg.ToString("N2") c/kg</td>
+                                            <td>@row.PriceWithCommission.ToString("N2")</td>
+                                            <td>@row.NetPrice.ToString("N2")</td>
                                             <td>@row.Notes</td>
                                         </tr>
                                     }
@@ -146,7 +383,7 @@
                 }
                 else
                 {
-                    <div class="alert alert-warning">No data to display</div>
+                    <div class="alert alert-warning">Không có dữ liệu</div>
                 }
             </div>
         </div>
@@ -155,27 +392,35 @@
     @if (!string.IsNullOrEmpty(errorMessage))
     {
         <div class="alert alert-danger mt-3" role="alert">
-            @errorMessage
+            <strong>Lỗi:</strong> @errorMessage
         </div>
     }
 </div>
 
 @code {
-    private OfferUploadDto uploadModel = new() 
-    { 
+    // ── State ──
+    private int currentStep = 1;
+    private OfferUploadDto uploadModel = new()
+    {
         SupplierName = "Toyoshima",
         ICEValue = 84.19m,
         CommissionPercent = 2.00m,
         OfferDate = DateTime.UtcNow.Date
     };
-
     private List<string> hviFileNames = new();
+    private List<HVIInputDto> hviInputs = new();
+    private HashSet<string> expandedLots = new();
+    private HashSet<string> showRawText = new();
+    private Dictionary<string, MemoryStream> hviFileStreams = new();
     private List<OutputGroupDto>? outputGroups;
     private bool isProcessing = false;
-    private bool isProcessed = false;
+    private bool isSaving = false;
+    private bool isRunningOcr = false;
+    private int ocrProgress = 0;
     private string? errorMessage;
     private int currentOfferId;
 
+    // ── Step 1: File selection handlers ──
     private async Task OnOfferFileSelected(InputFileChangeEventArgs e)
     {
         try
@@ -183,26 +428,19 @@
             var file = e.File;
             if (file != null)
             {
-                Console.WriteLine($"Offer file selected: {file.Name}, Size: {file.Size} bytes");
                 uploadModel.OfferFileName = file.Name;
-                
-                // Read file to MemoryStream (don't use 'using' - we need to keep it alive)
                 var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
                 var memoryStream = new MemoryStream();
                 await stream.CopyToAsync(memoryStream);
                 memoryStream.Position = 0;
-                stream.Dispose(); // Dispose the input stream only
-                
+                stream.Dispose();
                 uploadModel.OfferPdfStream = memoryStream;
-                
-                Console.WriteLine($"Offer file loaded successfully: {memoryStream.Length} bytes");
                 StateHasChanged();
             }
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error loading offer file: {ex.Message}");
-            errorMessage = $"Error loading offer file: {ex.Message}";
+            errorMessage = $"Lỗi load file offer: {ex.Message}";
         }
     }
 
@@ -212,85 +450,67 @@
         {
             uploadModel.HVIFiles.Clear();
             hviFileNames.Clear();
-
+            hviFileStreams.Clear();
             var files = e.GetMultipleFiles(20);
-            Console.WriteLine($"HVI files selected: {files.Count}");
-
             foreach (var file in files)
             {
-                Console.WriteLine($"Loading HVI file: {file.Name}, Size: {file.Size} bytes");
                 hviFileNames.Add(file.Name);
-                
-                // Read file to MemoryStream (don't use 'using' - we need to keep it alive)
                 var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
                 var memoryStream = new MemoryStream();
                 await stream.CopyToAsync(memoryStream);
                 memoryStream.Position = 0;
-                stream.Dispose(); // Dispose the input stream only
-                
-                uploadModel.HVIFiles.Add(new HVIFileDto
-                {
-                    FileName = file.Name,
-                    FileStream = memoryStream
-                });
-                
-                Console.WriteLine($"HVI file loaded: {file.Name}, {memoryStream.Length} bytes");
+                stream.Dispose();
+                uploadModel.HVIFiles.Add(new HVIFileDto { FileName = file.Name, FileStream = memoryStream });
+
+                // Index by lot code (extracted from filename)
+                var lotCode = System.IO.Path.GetFileNameWithoutExtension(file.Name);
+                hviFileStreams[lotCode] = memoryStream;
             }
-            
-            Console.WriteLine($"Total HVI files loaded: {uploadModel.HVIFiles.Count}");
             StateHasChanged();
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error loading HVI files: {ex.Message}");
-            errorMessage = $"Error loading HVI files: {ex.Message}";
+            errorMessage = $"Lỗi load file HVI: {ex.Message}";
         }
     }
 
+    // ── Step 1 → Step 2 ──
     private async Task HandleUpload()
     {
         try
         {
-            // Validation
             if (uploadModel.OfferPdfStream == null)
             {
-                errorMessage = "Please select an Offer PDF file";
+                errorMessage = "Vui lòng chọn file Offer PDF";
                 return;
             }
-
-            if (!uploadModel.HVIFiles.Any())
-            {
-                errorMessage = "Please select at least one HVI Report PDF file";
-                return;
-            }
-
             if (string.IsNullOrWhiteSpace(uploadModel.SupplierName))
             {
-                errorMessage = "Please enter Supplier Name";
+                errorMessage = "Vui lòng nhập tên Supplier";
                 return;
             }
 
-            Console.WriteLine($"Starting processing... Supplier: {uploadModel.SupplierName}, ICE: {uploadModel.ICEValue}");
-            
             isProcessing = true;
             errorMessage = null;
             StateHasChanged();
 
-            Console.WriteLine("Calling OfferService.ProcessOfferAsync...");
             currentOfferId = await OfferService.ProcessOfferAsync(uploadModel);
-            Console.WriteLine($"Offer processed. OfferId: {currentOfferId}");
+            hviInputs = await OfferService.GetHVIForReviewAsync(currentOfferId);
 
-            Console.WriteLine("Getting processed output...");
-            outputGroups = await OfferService.GetProcessedOutputAsync(currentOfferId);
-            Console.WriteLine($"Output groups retrieved: {outputGroups?.Count ?? 0}");
+            // Auto-expand all lots
+            expandedLots = new HashSet<string>(hviInputs.Select(h => h.LotCode));
 
-            isProcessed = true;
-            Console.WriteLine("Processing complete!");
+            currentStep = 2;
+
+            // Auto-run OCR if HVI files were uploaded
+            if (hviFileStreams.Any() && hviInputs.Any())
+            {
+                _ = RunOcrForAll();
+            }
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error processing offer: {ex}");
-            errorMessage = $"Error processing offer: {ex.Message}\n\nStack trace: {ex.StackTrace}";
+            errorMessage = $"Lỗi xử lý offer: {ex.Message}";
         }
         finally
         {
@@ -299,33 +519,196 @@
         }
     }
 
+    // ── Step 2: OCR ──
+    private async Task RunOcrForAll()
+    {
+        isRunningOcr = true;
+        ocrProgress = 0;
+        StateHasChanged();
+
+        for (int i = 0; i < hviInputs.Count; i++)
+        {
+            var hvi = hviInputs[i];
+            if (hviFileStreams.TryGetValue(hvi.LotCode, out var stream))
+            {
+                if (!hvi.HasData) // Only OCR if no existing data
+                {
+                    await RunOcrForSingleLot(i);
+                }
+            }
+            ocrProgress = i + 1;
+            StateHasChanged();
+        }
+
+        isRunningOcr = false;
+        StateHasChanged();
+    }
+
+    private async Task RunOcrForSingleLot(int idx)
+    {
+        var hvi = hviInputs[idx];
+        if (!hviFileStreams.TryGetValue(hvi.LotCode, out var stream)) return;
+
+        hvi.OcrStatus = OcrStatus.Processing;
+        StateHasChanged();
+
+        try
+        {
+            stream.Position = 0;
+            var result = await OfferService.RunOcrForLotAsync(hvi.LotCode, stream, hvi.FileName);
+
+            // Merge OCR result into current input
+            hvi.Micronaire = result.Micronaire;
+            hvi.Length = result.Length;
+            hvi.StrengthGPT = result.StrengthGPT;
+            hvi.Uniformity = result.Uniformity;
+            hvi.ColorRd = result.ColorRd;
+            hvi.ColorGrade = result.ColorGrade;
+            hvi.Leaf = result.Leaf;
+            hvi.CropYear = result.CropYear;
+            hvi.TotalBales = result.TotalBales;
+            hvi.ConfidenceScore = result.ConfidenceScore;
+            hvi.RawOcrText = result.RawOcrText;
+            hvi.OcrStatus = result.OcrStatus;
+            hvi.OcrErrorMessage = result.OcrErrorMessage;
+        }
+        catch (Exception ex)
+        {
+            hvi.OcrStatus = OcrStatus.Failed;
+            hvi.OcrErrorMessage = ex.Message;
+        }
+
+        StateHasChanged();
+    }
+
+    private void ClearLotData(int idx)
+    {
+        var hvi = hviInputs[idx];
+        hvi.Micronaire = null;
+        hvi.Length = null;
+        hvi.StrengthGPT = null;
+        hvi.Uniformity = null;
+        hvi.ColorRd = null;
+        hvi.ColorGrade = null;
+        hvi.Leaf = null;
+        hvi.CropYear = null;
+        hvi.TotalBales = null;
+        hvi.OcrStatus = OcrStatus.Skipped;
+        hvi.RawOcrText = null;
+        hvi.ConfidenceScore = 0;
+        StateHasChanged();
+    }
+
+    private void ToggleRawText(string lotCode)
+    {
+        if (!showRawText.Remove(lotCode))
+            showRawText.Add(lotCode);
+        StateHasChanged();
+    }
+
+    // ── Step 2: HVI Review helpers ──
+    private void ToggleLotExpand(string lotCode)
+    {
+        if (!expandedLots.Remove(lotCode))
+            expandedLots.Add(lotCode);
+    }
+
+    private void ExpandAllLots()
+    {
+        expandedLots = new HashSet<string>(hviInputs.Select(h => h.LotCode));
+        StateHasChanged();
+    }
+
+    // ── Step 2 → Step 3 ──
+    private async Task SaveHVIAndCalculate()
+    {
+        try
+        {
+            isSaving = true;
+            errorMessage = null;
+            StateHasChanged();
+
+            await OfferService.SaveHVIDataAsync(hviInputs);
+            await OfferService.RecalculateOutputsAsync(currentOfferId);
+            outputGroups = await OfferService.GetProcessedOutputAsync(currentOfferId);
+
+            currentStep = 3;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Lỗi lưu HVI: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SkipHVIReview()
+    {
+        await SaveHVIAndCalculate();
+    }
+
+    // ── Navigation ──
+    private void GoBackToStep1()
+    {
+        currentStep = 1;
+        StateHasChanged();
+    }
+
+    private async Task GoBackToHVIReview()
+    {
+        hviInputs = await OfferService.GetHVIForReviewAsync(currentOfferId);
+        expandedLots = new HashSet<string>(hviInputs.Select(h => h.LotCode));
+        currentStep = 2;
+        StateHasChanged();
+    }
+
     private async Task ExportToExcel()
     {
         try
         {
             var excelBytes = await OfferService.ExportToExcelAsync(currentOfferId);
             var fileName = $"CottonOffer_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
-            
             await JSRuntime.InvokeVoidAsync("downloadFile", fileName, Convert.ToBase64String(excelBytes));
         }
         catch (Exception ex)
         {
-            errorMessage = $"Error exporting to Excel: {ex.Message}";
+            errorMessage = $"Lỗi export Excel: {ex.Message}";
         }
     }
 
     private void ResetForm()
     {
-        isProcessed = false;
-        uploadModel = new() 
-        { 
+        currentStep = 1;
+        uploadModel = new()
+        {
             SupplierName = "Toyoshima",
             ICEValue = 84.19m,
             CommissionPercent = 2.00m,
             OfferDate = DateTime.UtcNow.Date
         };
         hviFileNames.Clear();
+        hviInputs.Clear();
+        hviFileStreams.Clear();
+        expandedLots.Clear();
+        showRawText.Clear();
         outputGroups = null;
         errorMessage = null;
+    }
+
+    // ── Helpers ──
+    private decimal? ParseDecimal(object? value)
+    {
+        if (value == null || string.IsNullOrWhiteSpace(value.ToString())) return null;
+        return decimal.TryParse(value.ToString(), System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : null;
+    }
+
+    private int? ParseInt(object? value)
+    {
+        if (value == null || string.IsNullOrWhiteSpace(value.ToString())) return null;
+        return int.TryParse(value.ToString(), out var i) ? i : null;
     }
 }

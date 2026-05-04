@@ -94,6 +94,7 @@ static string GetConnectionString(IConfiguration configuration)
         ?? "Host=localhost;Database=cbas_db;Username=postgres;Password=postgres";
 }
 
+builder.Services.AddSingleton<IOcrService, TesseractOcrService>();
 builder.Services.AddScoped<IPdfParserService, PdfParserService>();
 builder.Services.AddScoped<IOfferProcessingService, OfferProcessingService>();
 builder.Services.AddScoped<IExcelExportService, ExcelExportService>();

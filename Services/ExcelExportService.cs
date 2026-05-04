@@ -50,19 +50,19 @@ public class ExcelExportService : IExcelExportService
                     worksheet.Cell(currentRow, 1).Value = row.STT;
                     worksheet.Cell(currentRow, 2).Value = row.Origin;
                     worksheet.Cell(currentRow, 3).Value = row.CropYear;
-                    worksheet.Cell(currentRow, 4).Value = row.Quantity;
+                    worksheet.Cell(currentRow, 4).Value = row.QuantityText ?? $"{row.Quantity} mt";
                     worksheet.Cell(currentRow, 5).Value = row.Type;
                     worksheet.Cell(currentRow, 6).Value = row.SpecialSpec ?? "";
                     worksheet.Cell(currentRow, 7).Value = row.Color ?? "";
                     worksheet.Cell(currentRow, 8).Value = row.Leaf.HasValue ? (double)row.Leaf.Value : "";
                     worksheet.Cell(currentRow, 9).Value = row.Length.HasValue ? (double)row.Length.Value : "";
-                    worksheet.Cell(currentRow, 10).Value = row.Micronaire.HasValue ? (double)row.Micronaire.Value : "";
-                    worksheet.Cell(currentRow, 11).Value = row.StrengthMin.HasValue ? (double)row.StrengthMin.Value : "";
+                    worksheet.Cell(currentRow, 10).Value = row.MicronaireText ?? (row.Micronaire.HasValue ? row.Micronaire.Value.ToString("N2") : "");
+                    worksheet.Cell(currentRow, 11).Value = row.StrengthText ?? (row.StrengthMin.HasValue ? row.StrengthMin.Value.ToString("N2") : "");
                     worksheet.Cell(currentRow, 12).Value = (double)row.Basis;
-                    worksheet.Cell(currentRow, 13).Value = row.ShipmentDate?.ToString("dd/MM/yyyy") ?? "";
-                    worksheet.Cell(currentRow, 14).Value = (double)row.PriceCentsPerKg;
-                    worksheet.Cell(currentRow, 15).Value = (double)row.PriceWithCommission;
-                    worksheet.Cell(currentRow, 16).Value = (double)row.NetPrice;
+                    worksheet.Cell(currentRow, 13).Value = row.ShipmentDateText ?? row.ShipmentDate?.ToString("M/yyyy") + " SO";
+                    worksheet.Cell(currentRow, 14).Value = $"{row.PriceCentsPerKg:N2} c/kg";
+                    worksheet.Cell(currentRow, 15).Value = $"{row.PriceWithCommission:N2} ma";
+                    worksheet.Cell(currentRow, 16).Value = $"{row.NetPrice:N2} ma";
                     worksheet.Cell(currentRow, 17).Value = row.Notes ?? "";
 
                     currentRow++;

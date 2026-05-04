@@ -7,8 +7,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="tools\**" />
+    <Content Remove="tools\**" />
+    <None Remove="tools\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="ClosedXML" Version="0.104.2" />
     <PackageReference Include="PdfPig" Version="0.1.9" />
+    <PackageReference Include="Tesseract" Version="5.2.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.4" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.4">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

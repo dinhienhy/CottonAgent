@@ -25,6 +25,8 @@ public class Offer
     [Column(TypeName = "decimal(5,2)")]
     public decimal CommissionPercent { get; set; } = 2.00m;
 
+    public string? ICESettlementsJson { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public virtual ICollection<OfferLot> OfferLots { get; set; } = new List<OfferLot>();

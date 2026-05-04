@@ -32,6 +32,9 @@ public class ProcessedOutput
     public decimal Quantity { get; set; }
 
     [MaxLength(100)]
+    public string? QuantityText { get; set; }
+
+    [MaxLength(100)]
     public string Type { get; set; } = string.Empty;
 
     [MaxLength(500)]
@@ -49,13 +52,22 @@ public class ProcessedOutput
     [Column(TypeName = "decimal(5,2)")]
     public decimal? Micronaire { get; set; }
 
+    [MaxLength(50)]
+    public string? MicronaireText { get; set; }
+
     [Column(TypeName = "decimal(5,2)")]
     public decimal? StrengthMin { get; set; }
+
+    [MaxLength(50)]
+    public string? StrengthText { get; set; }
 
     [Column(TypeName = "decimal(10,2)")]
     public decimal Basis { get; set; }
 
     public DateTime? ShipmentDate { get; set; }
+
+    [MaxLength(100)]
+    public string? ShipmentDateText { get; set; }
 
     [Column(TypeName = "decimal(10,4)")]
     public decimal PriceCentsPerKg { get; set; }

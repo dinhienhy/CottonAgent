@@ -18,8 +18,15 @@ RUN dotnet publish "CBAS.Web.csproj" -c Release -o /app/publish /p:UseAppHost=fa
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
 
-# Install PostgreSQL client tools (optional, for debugging)
-RUN apt-get update && apt-get install -y postgresql-client && rm -rf /var/lib/apt/lists/*
+# Install PostgreSQL client + Tesseract OCR with English language data
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    libleptonica-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
 
 COPY --from=publish /app/publish .
 

@@ -2,9 +2,13 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @using CBAS.Web.Services
 @using CBAS.Web.DTOs
+@using CBAS.Web.Data
+@using CBAS.Web.Models
 @using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.EntityFrameworkCore
 @inject IOfferProcessingService OfferService
 @inject IJSRuntime JSRuntime
+@inject ApplicationDbContext DbContext
 
 <PageTitle>Cotton Offer Processor</PageTitle>
 
@@ -31,8 +35,14 @@
                 <EditForm Model="@uploadModel" OnValidSubmit="@HandleUpload">
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label class="form-label">Supplier Name</label>
-                            <InputText class="form-control" @bind-Value="uploadModel.SupplierName" />
+                            <label class="form-label">Shipper</label>
+                            <select class="form-select" @bind="uploadModel.SupplierName">
+                                <option value="">-- Chọn Shipper --</option>
+                                @foreach (var s in shipperNames)
+                                {
+                                    <option value="@s">@s</option>
+                                }
+                            </select>
                         </div>
                         <div class="col-md-3">
                             <label class="form-label">ICE Value</label>
@@ -400,14 +410,24 @@
 @code {
     // ── State ──
     private int currentStep = 1;
+    private List<string> shipperNames = new();
     private OfferUploadDto uploadModel = new()
     {
-        SupplierName = "Toyoshima",
+        SupplierName = "",
         ICEValue = 84.19m,
         CommissionPercent = 2.00m,
         OfferDate = DateTime.UtcNow.Date
     };
     private List<string> hviFileNames = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        shipperNames = await DbContext.Shippers
+            .Where(s => s.IsActive)
+            .OrderBy(s => s.Name)
+            .Select(s => s.Name)
+            .ToListAsync();
+    }
     private List<HVIInputDto> hviInputs = new();
     private HashSet<string> expandedLots = new();
     private HashSet<string> showRawText = new();

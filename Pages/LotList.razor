@@ -174,6 +174,7 @@
                                           <button class="btn btn-outline-success btn-sm py-0" @onclick="() => SetStatus(lot, LotStatus.Available)">Open</button> }
                                         @if (lot.Status == LotStatus.Sold)
                                         { <button class="btn btn-outline-success btn-sm py-0" @onclick="() => SetStatus(lot, LotStatus.Available)">Open</button> }
+                                        <button class="btn btn-outline-danger btn-sm py-0" @onclick="() => DeleteLot(lot)">Xóa</button>
                                     </div>
                                 </td>
                             </tr>
@@ -297,6 +298,24 @@
         lot.Status = newStatus;
         lot.UpdatedAt = DateTime.UtcNow;
         await Context.SaveChangesAsync();
+        await LoadLots();
+    }
+
+    private async Task DeleteLot(Lot lot)
+    {
+        // Unlink OfferLots referencing this Lot
+        var linkedOfferLots = await Context.OfferLots.Where(ol => ol.MasterLotId == lot.Id).ToListAsync();
+        foreach (var ol in linkedOfferLots)
+            ol.MasterLotId = null;
+
+        // Unlink HVIReports referencing this Lot
+        var linkedHvis = await Context.HVIReports.Where(h => h.MasterLotId == lot.Id).ToListAsync();
+        foreach (var h in linkedHvis)
+            h.MasterLotId = null;
+
+        Context.Lots.Remove(lot);
+        await Context.SaveChangesAsync();
+        selectedLotIds.Remove(lot.Id);
         await LoadLots();
     }
 

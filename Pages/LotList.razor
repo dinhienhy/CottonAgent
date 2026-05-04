@@ -143,7 +143,7 @@
                                 <td>@hvi?.Length?.ToString("F2")</td>
                                 <td>@hvi?.Micronaire?.ToString("F2")</td>
                                 <td>@hvi?.StrengthGPT?.ToString("F1")</td>
-                                <td class="text-end">@lot.BasisCents.ToString("F2")</td>
+                                <td class="text-end">@((lot.BasisCents * 100m).ToString("F0"))</td>
                                 <td class="text-end fw-bold">@priceCkg.ToString("F2")</td>
                                 <td class="text-end">@priceComm.ToString("F2")</td>
                                 <td class="text-end">@priceNet.ToString("F2")</td>
@@ -365,7 +365,7 @@
                         Length = hvi?.Length,
                         Micronaire = hvi?.Micronaire,
                         StrengthMin = hvi?.StrengthGPT,
-                        Basis = l.BasisCents * 100m,
+                        Basis = l.BasisCents,
                         ShipmentDate = l.ShipmentDate,
                         ShipmentDateText = l.ShipmentDateText,
                         PriceCentsPerKg = priceCkg,

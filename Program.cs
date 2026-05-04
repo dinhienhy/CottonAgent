@@ -114,6 +114,29 @@ using (var scope = app.Services.CreateScope())
     {
         await authService.CreateUserAsync("admin", "admin123", "Administrator", "admin@cbas.local");
     }
+
+    // Backfill Lot fields from OfferLot (one-time for lots created before these fields existed)
+    var lotsToFix = await db.Lots.Where(l => l.BasisCents == 0).ToListAsync();
+    if (lotsToFix.Any())
+    {
+        foreach (var lot in lotsToFix)
+        {
+            var offerLot = await db.OfferLots
+                .Where(ol => ol.LotCode == lot.LotCode)
+                .OrderByDescending(ol => ol.LotId)
+                .FirstOrDefaultAsync();
+            if (offerLot != null)
+            {
+                lot.BasisCents = offerLot.BasisCents;
+                lot.ShipmentDate = offerLot.ShipmentDate;
+                lot.ShipmentDateText = offerLot.ShipmentDateText;
+                lot.SpecialSpec = offerLot.SpecialSpec;
+                lot.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+        await db.SaveChangesAsync();
+        Console.WriteLine($"Backfilled {lotsToFix.Count} lots with Basis/Shipment data from OfferLots");
+    }
 }
 
 // Configure the HTTP request pipeline.

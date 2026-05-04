@@ -46,5 +46,4 @@ public class HVIReport
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    public virtual ICollection<OfferLot> OfferLots { get; set; } = new List<OfferLot>();
 }

@@ -41,5 +41,4 @@ public class OfferLot
     [Column(TypeName = "decimal(10,4)")]
     public decimal PriceCentsPerLb { get; set; }
 
-    public virtual HVIReport? HVIReport { get; set; }
 }

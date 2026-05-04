@@ -26,13 +26,6 @@ public class ApplicationDbContext : DbContext
             .HasForeignKey(ol => ol.OfferId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        modelBuilder.Entity<OfferLot>()
-            .HasOne(ol => ol.HVIReport)
-            .WithMany(h => h.OfferLots)
-            .HasForeignKey(ol => ol.LotCode)
-            .HasPrincipalKey(h => h.LotCode)
-            .OnDelete(DeleteBehavior.SetNull);
-
         modelBuilder.Entity<ProcessedOutput>()
             .HasOne(po => po.Offer)
             .WithMany()

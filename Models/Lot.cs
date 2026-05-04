@@ -32,6 +32,17 @@ public class Lot
     [Column(TypeName = "decimal(10,2)")]
     public decimal QuantityAvailable { get; set; }
 
+    [Column(TypeName = "decimal(10,2)")]
+    public decimal BasisCents { get; set; }
+
+    public DateTime? ShipmentDate { get; set; }
+
+    [MaxLength(100)]
+    public string? ShipmentDateText { get; set; }
+
+    [MaxLength(500)]
+    public string? SpecialSpec { get; set; }
+
     public LotStatus Status { get; set; } = LotStatus.Available;
 
     public int? LatestOfferId { get; set; }

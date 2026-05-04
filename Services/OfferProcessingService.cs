@@ -318,6 +318,10 @@ public class OfferProcessingService : IOfferProcessingService
                     Type = offerLot.Type,
                     QuantityOriginal = offerLot.Quantity,
                     QuantityAvailable = offerLot.Quantity,
+                    BasisCents = offerLot.BasisCents,
+                    ShipmentDate = offerLot.ShipmentDate,
+                    ShipmentDateText = offerLot.ShipmentDateText,
+                    SpecialSpec = offerLot.SpecialSpec,
                     Status = LotStatus.Available,
                     LatestOfferId = offerId,
                     CreatedAt = DateTime.UtcNow,
@@ -330,6 +334,10 @@ public class OfferProcessingService : IOfferProcessingService
             {
                 // Update existing Lot — quantity from latest offer replaces old
                 lot.QuantityAvailable = offerLot.Quantity;
+                lot.BasisCents = offerLot.BasisCents;
+                lot.ShipmentDate = offerLot.ShipmentDate;
+                lot.ShipmentDateText = offerLot.ShipmentDateText;
+                lot.SpecialSpec = offerLot.SpecialSpec;
                 lot.LatestOfferId = offerId;
                 lot.UpdatedAt = DateTime.UtcNow;
                 if (!string.IsNullOrEmpty(offerLot.Origin)) lot.Origin = offerLot.Origin;

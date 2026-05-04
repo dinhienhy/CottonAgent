@@ -1,52 +1,56 @@
 @page "/lots"
 @using CBAS.Web.Data
 @using CBAS.Web.Models
+@using CBAS.Web.DTOs
+@using CBAS.Web.Services
 @using Microsoft.EntityFrameworkCore
 @inject ApplicationDbContext Context
+@inject IExcelExportService ExcelExport
+@inject IJSRuntime JS
 
 <PageTitle>Quản lý Lot</PageTitle>
 
-<div class="container-fluid py-4">
-    <h2 class="mb-4">Quản lý Lot hàng</h2>
+<div class="container-fluid py-3" style="font-size:0.82rem;">
 
-    @* Filters *@
-    <div class="card mb-3">
+    @* ── Header: title + ICE/Commission + Export button ── *@
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h5 class="mb-0">Quản lý Lot hàng</h5>
+        <div class="d-flex align-items-center gap-3">
+            <div class="d-flex align-items-center gap-1">
+                <label class="fw-bold small text-nowrap">ICE:</label>
+                <input type="number" step="0.01" class="form-control form-control-sm" style="width:90px" @bind="iceValue" @bind:event="oninput" />
+            </div>
+            <div class="d-flex align-items-center gap-1">
+                <label class="fw-bold small text-nowrap">Comm%:</label>
+                <input type="number" step="0.01" class="form-control form-control-sm" style="width:80px" @bind="commissionPercent" @bind:event="oninput" />
+            </div>
+            <button class="btn btn-success btn-sm text-nowrap" @onclick="ExportSelectedLots" disabled="@(!selectedLotIds.Any())">
+                Tạo Output (@selectedLotIds.Count)
+            </button>
+        </div>
+    </div>
+
+    @* ── Filters ── *@
+    <div class="card mb-2">
         <div class="card-body py-2">
             <div class="row g-2 align-items-end">
-                <div class="col-md-2">
-                    <label class="form-label small mb-0">Shipper</label>
-                    <select class="form-select form-select-sm" @bind="filterShipper">
-                        <option value="0">Tất cả</option>
-                        @foreach (var s in shipperList)
-                        {
-                            <option value="@s.ShipperId">@s.Name</option>
-                        }
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label small mb-0">Origin</label>
-                    <select class="form-select form-select-sm" @bind="filterOrigin">
-                        <option value="">Tất cả</option>
-                        @foreach (var o in originList)
-                        {
-                            <option value="@o">@o</option>
-                        }
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label small mb-0">Trạng thái</label>
+                <div class="col"><label class="form-label small mb-0">Shipper</label>
+                    <select class="form-select form-select-sm" @bind="filterShipper"><option value="0">Tất cả</option>
+                        @foreach (var s in shipperList) { <option value="@s.ShipperId">@s.Name</option> }
+                    </select></div>
+                <div class="col"><label class="form-label small mb-0">Origin</label>
+                    <select class="form-select form-select-sm" @bind="filterOrigin"><option value="">Tất cả</option>
+                        @foreach (var o in originList) { <option value="@o">@o</option> }
+                    </select></div>
+                <div class="col"><label class="form-label small mb-0">Status</label>
                     <select class="form-select form-select-sm" @bind="filterStatus">
-                        <option value="-1">Tất cả</option>
-                        <option value="0">Available</option>
-                        <option value="1">Reserved</option>
-                        <option value="2">Sold</option>
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label small mb-0">Tìm Lot Code</label>
-                    <input class="form-control form-control-sm" @bind="filterLotCode" placeholder="ME066..." />
-                </div>
-                <div class="col-md-2">
+                        <option value="-1">Tất cả</option><option value="0">Available</option><option value="1">Reserved</option><option value="2">Sold</option>
+                    </select></div>
+                <div class="col"><label class="form-label small mb-0">Shipment</label>
+                    <input type="month" class="form-control form-control-sm" @bind="filterShipmentMonth" /></div>
+                <div class="col"><label class="form-label small mb-0">Lot Code</label>
+                    <input class="form-control form-control-sm" @bind="filterLotCode" placeholder="ME066..." /></div>
+                <div class="col-auto">
                     <button class="btn btn-sm btn-primary" @onclick="ApplyFilter">Lọc</button>
                     <button class="btn btn-sm btn-outline-secondary ms-1" @onclick="ClearFilter">Xóa</button>
                 </div>
@@ -54,125 +58,122 @@
         </div>
     </div>
 
-    @* Summary *@
+    @* ── Summary cards ── *@
     @if (lots != null)
     {
-        <div class="row mb-3">
-            <div class="col-md-3">
-                <div class="card border-success">
-                    <div class="card-body py-2 text-center">
-                        <div class="text-muted small">Available</div>
-                        <strong class="text-success fs-4">@lots.Count(l => l.Status == LotStatus.Available)</strong>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card border-warning">
-                    <div class="card-body py-2 text-center">
-                        <div class="text-muted small">Reserved</div>
-                        <strong class="text-warning fs-4">@lots.Count(l => l.Status == LotStatus.Reserved)</strong>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card border-secondary">
-                    <div class="card-body py-2 text-center">
-                        <div class="text-muted small">Sold</div>
-                        <strong class="text-secondary fs-4">@lots.Count(l => l.Status == LotStatus.Sold)</strong>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card border-primary">
-                    <div class="card-body py-2 text-center">
-                        <div class="text-muted small">Tổng QTY Available</div>
-                        <strong class="text-primary fs-4">@lots.Where(l => l.Status == LotStatus.Available).Sum(l => l.QuantityAvailable).ToString("F0") mt</strong>
-                    </div>
-                </div>
-            </div>
+        <div class="row mb-2 g-2">
+            <div class="col"><div class="card border-success"><div class="card-body py-1 text-center">
+                <span class="text-muted small">Available</span><br/><strong class="text-success">@lots.Count(l => l.Status == LotStatus.Available)</strong>
+            </div></div></div>
+            <div class="col"><div class="card border-warning"><div class="card-body py-1 text-center">
+                <span class="text-muted small">Reserved</span><br/><strong class="text-warning">@lots.Count(l => l.Status == LotStatus.Reserved)</strong>
+            </div></div></div>
+            <div class="col"><div class="card border-secondary"><div class="card-body py-1 text-center">
+                <span class="text-muted small">Sold</span><br/><strong class="text-secondary">@lots.Count(l => l.Status == LotStatus.Sold)</strong>
+            </div></div></div>
+            <div class="col"><div class="card border-primary"><div class="card-body py-1 text-center">
+                <span class="text-muted small">Total QTY Avail</span><br/><strong class="text-primary">@lots.Where(l => l.Status == LotStatus.Available).Sum(l => l.QuantityAvailable).ToString("F0") mt</strong>
+            </div></div></div>
         </div>
     }
 
-    @* Lot Table *@
+    @* ── Lot Table ── *@
     <div class="card">
-        <div class="card-body p-0">
-            <table class="table table-striped table-hover mb-0" style="font-size: 0.9rem;">
+        <div class="table-responsive">
+            <table class="table table-sm table-striped table-hover mb-0 align-middle" style="font-size:0.8rem;">
                 <thead class="table-dark">
                     <tr>
+                        <th><input type="checkbox" @onchange="ToggleSelectAll" /></th>
+                        <th>STT</th>
                         <th>Lot Code</th>
                         <th>Shipper</th>
                         <th>Origin</th>
                         <th>Crop Year</th>
                         <th>Type</th>
-                        <th class="text-end">QTY Original</th>
-                        <th class="text-end">QTY Available</th>
+                        <th>Spec</th>
+                        <th>Shipment</th>
+                        <th class="text-end">QTY Orig</th>
+                        <th class="text-end">QTY Avail</th>
+                        <th>Color</th>
+                        <th>Leaf</th>
+                        <th>Length</th>
+                        <th>Mic</th>
+                        <th>Str Min</th>
+                        <th class="text-end">Basis</th>
+                        <th class="text-end">c/kg</th>
+                        <th class="text-end">+Comm</th>
+                        <th class="text-end">Net</th>
                         <th class="text-center">Status</th>
                         <th class="text-center">HVI</th>
-                        <th>Updated</th>
-                        <th></th>
+                        <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
                     @if (lots == null)
                     {
-                        <tr><td colspan="11" class="text-center py-3">Đang tải...</td></tr>
+                        <tr><td colspan="23" class="text-center py-3">Đang tải...</td></tr>
                     }
                     else if (!lots.Any())
                     {
-                        <tr><td colspan="11" class="text-center py-3 text-muted">Không có lot nào</td></tr>
+                        <tr><td colspan="23" class="text-center py-3 text-muted">Không có lot nào</td></tr>
                     }
                     else
                     {
+                        int stt = 1;
                         @foreach (var lot in lots)
                         {
-                            <tr>
+                            var hvi = lot.HVIReport;
+                            var priceCkg = CalcPriceCkg(lot.BasisCents);
+                            var priceComm = priceCkg - commissionPercent;
+                            var priceNet = priceComm;
+                            <tr class="@(selectedLotIds.Contains(lot.Id) ? "table-info" : "")">
+                                <td><input type="checkbox" checked="@selectedLotIds.Contains(lot.Id)" @onchange="e => ToggleLot(lot.Id, (bool)(e.Value ?? false))" /></td>
+                                <td>@(stt++)</td>
                                 <td><strong>@lot.LotCode</strong></td>
                                 <td>@lot.Shipper.Name</td>
                                 <td>@lot.Origin</td>
                                 <td>@lot.CropYear</td>
                                 <td>@lot.Type</td>
+                                <td>@lot.SpecialSpec</td>
+                                <td>@lot.ShipmentDateText</td>
                                 <td class="text-end">@lot.QuantityOriginal.ToString("F0")</td>
                                 <td class="text-end">@lot.QuantityAvailable.ToString("F0")</td>
+                                <td>@(hvi?.ColorRd?.ToString("F0") ?? hvi?.ColorGrade)</td>
+                                <td>@hvi?.Leaf?.ToString("F1")</td>
+                                <td>@hvi?.Length?.ToString("F2")</td>
+                                <td>@hvi?.Micronaire?.ToString("F2")</td>
+                                <td>@hvi?.StrengthGPT?.ToString("F1")</td>
+                                <td class="text-end">@lot.BasisCents.ToString("F2")</td>
+                                <td class="text-end fw-bold">@priceCkg.ToString("F2")</td>
+                                <td class="text-end">@priceComm.ToString("F2")</td>
+                                <td class="text-end">@priceNet.ToString("F2")</td>
                                 <td class="text-center">
                                     @switch (lot.Status)
                                     {
-                                        case LotStatus.Available:
-                                            <span class="badge bg-success">Available</span>
-                                            break;
-                                        case LotStatus.Reserved:
-                                            <span class="badge bg-warning text-dark">Reserved</span>
-                                            break;
-                                        case LotStatus.Sold:
-                                            <span class="badge bg-secondary">Sold</span>
-                                            break;
+                                        case LotStatus.Available: <span class="badge bg-success">Avail</span> break;
+                                        case LotStatus.Reserved: <span class="badge bg-warning text-dark">Resv</span> break;
+                                        case LotStatus.Sold: <span class="badge bg-secondary">Sold</span> break;
                                     }
                                 </td>
                                 <td class="text-center">
                                     @if (lot.HVIReportId.HasValue)
                                     {
-                                        <span class="badge bg-info">HVI ✓</span>
+                                        <button class="btn btn-link btn-sm p-0" @onclick="() => ShowHviModal(lot)">HVI ✓</button>
                                     }
                                     else
                                     {
-                                        <span class="badge bg-light text-muted">—</span>
+                                        <span class="text-muted">—</span>
                                     }
                                 </td>
-                                <td><small>@lot.UpdatedAt.ToLocalTime().ToString("dd/MM HH:mm")</small></td>
                                 <td>
                                     <div class="btn-group btn-group-sm">
                                         @if (lot.Status == LotStatus.Available)
-                                        {
-                                            <button class="btn btn-outline-warning" @onclick="() => SetStatus(lot, LotStatus.Reserved)">Reserve</button>
-                                        }
+                                        { <button class="btn btn-outline-warning btn-sm py-0" @onclick="() => SetStatus(lot, LotStatus.Reserved)">Resv</button> }
                                         @if (lot.Status == LotStatus.Reserved)
-                                        {
-                                            <button class="btn btn-outline-secondary" @onclick="() => SetStatus(lot, LotStatus.Sold)">Sold</button>
-                                            <button class="btn btn-outline-success" @onclick="() => SetStatus(lot, LotStatus.Available)">Unreserve</button>
-                                        }
+                                        { <button class="btn btn-outline-secondary btn-sm py-0" @onclick="() => SetStatus(lot, LotStatus.Sold)">Sold</button>
+                                          <button class="btn btn-outline-success btn-sm py-0" @onclick="() => SetStatus(lot, LotStatus.Available)">Open</button> }
                                         @if (lot.Status == LotStatus.Sold)
-                                        {
-                                            <button class="btn btn-outline-success" @onclick="() => SetStatus(lot, LotStatus.Available)">Reopen</button>
-                                        }
+                                        { <button class="btn btn-outline-success btn-sm py-0" @onclick="() => SetStatus(lot, LotStatus.Available)">Open</button> }
                                     </div>
                                 </td>
                             </tr>
@@ -184,14 +185,65 @@
     </div>
 </div>
 
+@* ── HVI Detail Modal ── *@
+@if (showHviModal && hviLot != null)
+{
+    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,0.5)">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title">HVI Chi tiết — @hviLot.LotCode</h6>
+                    <button type="button" class="btn-close" @onclick="CloseHviModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (editingHvi != null)
+                    {
+                        <div class="row g-2">
+                            <div class="col-6"><label class="form-label small">Micronaire</label><input type="number" step="0.01" class="form-control form-control-sm" @bind="editingHvi.Micronaire" /></div>
+                            <div class="col-6"><label class="form-label small">Length</label><input type="number" step="0.01" class="form-control form-control-sm" @bind="editingHvi.Length" /></div>
+                            <div class="col-6"><label class="form-label small">Strength GPT</label><input type="number" step="0.1" class="form-control form-control-sm" @bind="editingHvi.StrengthGPT" /></div>
+                            <div class="col-6"><label class="form-label small">Uniformity</label><input type="number" step="0.1" class="form-control form-control-sm" @bind="editingHvi.Uniformity" /></div>
+                            <div class="col-6"><label class="form-label small">Color Rd</label><input type="number" step="0.1" class="form-control form-control-sm" @bind="editingHvi.ColorRd" /></div>
+                            <div class="col-6"><label class="form-label small">Color Grade</label><input class="form-control form-control-sm" @bind="editingHvi.ColorGrade" /></div>
+                            <div class="col-6"><label class="form-label small">Leaf</label><input type="number" step="0.1" class="form-control form-control-sm" @bind="editingHvi.Leaf" /></div>
+                            <div class="col-6"><label class="form-label small">Crop Year</label><input class="form-control form-control-sm" @bind="editingHvi.CropYear" /></div>
+                            <div class="col-6"><label class="form-label small">Total Bales</label><input type="number" class="form-control form-control-sm" @bind="editingHvi.TotalBales" /></div>
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer py-1">
+                    <button class="btn btn-primary btn-sm" @onclick="SaveHvi">Lưu HVI</button>
+                    <button class="btn btn-secondary btn-sm" @onclick="CloseHviModal">Đóng</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
+    private const decimal LB_TO_KG = 2.20462m;
+
+    // Price inputs
+    private decimal iceValue = 84.19m;
+    private decimal commissionPercent = 2.00m;
+
+    // Data
     private List<Lot>? lots;
     private List<Shipper> shipperList = new();
     private List<string> originList = new();
+    private HashSet<int> selectedLotIds = new();
+
+    // Filters
     private int filterShipper = 0;
     private string filterOrigin = "";
     private int filterStatus = -1;
     private string filterLotCode = "";
+    private DateTime? filterShipmentMonth;
+
+    // HVI Modal
+    private bool showHviModal = false;
+    private Lot? hviLot;
+    private HVIReport? editingHvi;
 
     protected override async Task OnInitializedAsync()
     {
@@ -200,10 +252,14 @@
         await LoadLots();
     }
 
+    private decimal CalcPriceCkg(decimal basisCents)
+        => Math.Round((iceValue + basisCents) * LB_TO_KG, 2);
+
     private async Task LoadLots()
     {
         var query = Context.Lots
             .Include(l => l.Shipper)
+            .Include(l => l.HVIReport)
             .AsQueryable();
 
         if (filterShipper > 0)
@@ -214,9 +270,15 @@
             query = query.Where(l => (int)l.Status == filterStatus);
         if (!string.IsNullOrEmpty(filterLotCode))
             query = query.Where(l => l.LotCode.Contains(filterLotCode));
+        if (filterShipmentMonth.HasValue)
+        {
+            var start = DateTime.SpecifyKind(new DateTime(filterShipmentMonth.Value.Year, filterShipmentMonth.Value.Month, 1), DateTimeKind.Utc);
+            var end = start.AddMonths(1);
+            query = query.Where(l => l.ShipmentDate >= start && l.ShipmentDate < end);
+        }
 
         lots = await query
-            .OrderBy(l => l.Status)
+            .OrderBy(l => l.ShipmentDate)
             .ThenBy(l => l.Origin)
             .ThenBy(l => l.LotCode)
             .ToListAsync();
@@ -226,10 +288,7 @@
 
     private async Task ClearFilter()
     {
-        filterShipper = 0;
-        filterOrigin = "";
-        filterStatus = -1;
-        filterLotCode = "";
+        filterShipper = 0; filterOrigin = ""; filterStatus = -1; filterLotCode = ""; filterShipmentMonth = null;
         await LoadLots();
     }
 
@@ -239,5 +298,85 @@
         lot.UpdatedAt = DateTime.UtcNow;
         await Context.SaveChangesAsync();
         await LoadLots();
+    }
+
+    // ── Selection ──
+    private void ToggleLot(int id, bool selected)
+    {
+        if (selected) selectedLotIds.Add(id); else selectedLotIds.Remove(id);
+    }
+
+    private void ToggleSelectAll(ChangeEventArgs e)
+    {
+        if (lots == null) return;
+        if ((bool)(e.Value ?? false))
+            foreach (var l in lots) selectedLotIds.Add(l.Id);
+        else
+            selectedLotIds.Clear();
+    }
+
+    // ── HVI Modal ──
+    private void ShowHviModal(Lot lot)
+    {
+        hviLot = lot;
+        editingHvi = lot.HVIReport;
+        showHviModal = true;
+    }
+
+    private void CloseHviModal() { showHviModal = false; hviLot = null; editingHvi = null; }
+
+    private async Task SaveHvi()
+    {
+        if (editingHvi != null)
+        {
+            await Context.SaveChangesAsync();
+            showHviModal = false;
+        }
+    }
+
+    // ── Export selected lots ──
+    private async Task ExportSelectedLots()
+    {
+        if (lots == null || !selectedLotIds.Any()) return;
+
+        var selected = lots.Where(l => selectedLotIds.Contains(l.Id)).ToList();
+
+        var groups = selected
+            .GroupBy(l => l.ShipmentDateText ?? (l.ShipmentDate.HasValue ? $"{l.ShipmentDate.Value:M/yyyy} SO" : "No Date"))
+            .Select(g => new OutputGroupDto
+            {
+                ShipmentDate = g.First().ShipmentDate,
+                GroupTitle = g.Key,
+                Rows = g.Select((l, idx) =>
+                {
+                    var hvi = l.HVIReport;
+                    var priceCkg = CalcPriceCkg(l.BasisCents);
+                    return new OutputRowDto
+                    {
+                        STT = idx + 1,
+                        Origin = l.Origin,
+                        CropYear = l.CropYear ?? "",
+                        Quantity = l.QuantityAvailable,
+                        QuantityText = $"{l.QuantityAvailable:F0} mt",
+                        Type = l.Type ?? "",
+                        SpecialSpec = l.SpecialSpec,
+                        Color = hvi?.ColorRd?.ToString("F0") ?? hvi?.ColorGrade,
+                        Leaf = hvi?.Leaf,
+                        Length = hvi?.Length,
+                        Micronaire = hvi?.Micronaire,
+                        StrengthMin = hvi?.StrengthGPT,
+                        Basis = l.BasisCents * 100m,
+                        ShipmentDate = l.ShipmentDate,
+                        ShipmentDateText = l.ShipmentDateText,
+                        PriceCentsPerKg = priceCkg,
+                        PriceWithCommission = priceCkg - commissionPercent,
+                        NetPrice = priceCkg - commissionPercent
+                    };
+                }).ToList()
+            }).ToList();
+
+        var bytes = await ExcelExport.GenerateExcelAsync(groups);
+        var b64 = Convert.ToBase64String(bytes);
+        await JS.InvokeVoidAsync("eval", $"var a=document.createElement('a');a.href='data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}';a.download='LotOutput_{DateTime.Now:yyyyMMdd_HHmm}.xlsx';a.click();");
     }
 }

@@ -103,8 +103,8 @@ public class OfferProcessingService : IOfferProcessingService
             try
             {
                 uploadDto.OfferPdfStream.Position = 0;
-                parseResult = _pdfParser.ParseOfferPdfFull(uploadDto.OfferPdfStream, offer.OfferId);
-                Console.WriteLine($"Parsed {parseResult.Lots.Count} lots, ICE settlements: {string.Join(", ", parseResult.ICESettlements.Select(kv => $"{kv.Key}={kv.Value}"))}");
+                parseResult = _pdfParser.ParseOfferPdfFull(uploadDto.OfferPdfStream, offer.OfferId, uploadDto.OfferFileName ?? "unknown.pdf");
+                Console.WriteLine($"[{parseResult.DetectedShipper}] Parsed {parseResult.Lots.Count} lots, ICE settlements: {string.Join(", ", parseResult.ICESettlements.Select(kv => $"{kv.Key}={kv.Value}"))}");
 
                 // Store ICE settlements on the offer
                 if (parseResult.ICESettlements.Count > 0)

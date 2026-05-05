@@ -2,13 +2,16 @@
 
 <PageTitle>CBAS.Web</PageTitle>
 
-<div class="page">
+<div class="page @(sidebarCollapsed ? "sidebar-collapsed" : "")">
     <div class="sidebar">
-        <NavMenu />
+        <NavMenu Collapsed="sidebarCollapsed" />
     </div>
 
     <main>
         <div class="top-row px-4">
+            <button class="btn btn-sm btn-outline-secondary me-auto sidebar-toggle" @onclick="ToggleSidebar" title="Thu/mở menu">
+                <span class="oi @(sidebarCollapsed ? "oi-menu" : "oi-arrow-left")"></span>
+            </button>
             <AuthorizeView>
                 <Authorized>
                     <span class="me-3">Welcome, <strong>@context.User.Identity?.Name</strong></span>
@@ -25,3 +28,8 @@
         </article>
     </main>
 </div>
+
+@code {
+    private bool sidebarCollapsed = false;
+    private void ToggleSidebar() => sidebarCollapsed = !sidebarCollapsed;
+}

@@ -78,31 +78,45 @@
     }
 
     @* ── Lot Table ── *@
+    <style>
+        .lot-grid { font-size: 0.75rem; border-collapse: collapse; }
+        .lot-grid th, .lot-grid td { border: 1px solid #dee2e6; padding: 3px 6px; white-space: nowrap; vertical-align: middle; }
+        .lot-grid thead th { position: sticky; top: 0; z-index: 2; background: #212529; color: #fff; border-color: #495057; font-weight: 600; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.02em; }
+        .lot-grid tbody tr:hover { background: #e8f4fd !important; }
+        .lot-grid tbody tr:nth-child(even) { background: #f8f9fa; }
+        .lot-grid tbody tr.row-selected { background: #cfe2ff !important; }
+        /* Column group backgrounds */
+        .col-info { background: rgba(13,110,253,0.04); }
+        .col-qty { background: rgba(25,135,84,0.05); }
+        .col-hvi { background: rgba(255,193,7,0.06); }
+        .col-price { background: rgba(220,53,69,0.04); }
+        .col-price.fw-bold { color: #b02a37; }
+    </style>
     <div class="card">
-        <div class="table-responsive">
-            <table class="table table-sm table-striped table-hover mb-0 align-middle" style="font-size:0.8rem;">
-                <thead class="table-dark">
+        <div class="table-responsive" style="max-height:72vh; overflow-y:auto;">
+            <table class="table table-sm mb-0 align-middle lot-grid">
+                <thead>
                     <tr>
-                        <th><input type="checkbox" @onchange="ToggleSelectAll" /></th>
-                        <th>STT</th>
+                        <th style="width:30px"><input type="checkbox" @onchange="ToggleSelectAll" /></th>
+                        <th style="width:35px">#</th>
                         <th>Lot Code</th>
                         <th>Shipper</th>
                         <th>Origin</th>
-                        <th>Crop Year</th>
+                        <th>Crop</th>
                         <th>Type / Spec</th>
-                        <th>Shipment / ETA</th>
-                        <th class="text-end">QTY Orig</th>
-                        <th class="text-end">QTY Avail</th>
-                        <th>Mic</th>
-                        <th>Len</th>
-                        <th>GPT</th>
-                        <th class="text-end">Basis</th>
-                        <th class="text-end">Giá c/kg</th>
+                        <th>Shipment</th>
+                        <th class="text-end">Orig</th>
+                        <th class="text-end">Avail</th>
+                        <th class="text-center" style="border-left:2px solid #ffc107">Mic</th>
+                        <th class="text-center">Len</th>
+                        <th class="text-center" style="border-right:2px solid #ffc107">GPT</th>
+                        <th class="text-end" style="border-left:2px solid #dc3545">Basis</th>
+                        <th class="text-end">c/kg</th>
                         <th class="text-end">+Comm</th>
-                        <th class="text-end">Net</th>
+                        <th class="text-end" style="border-right:2px solid #dc3545">Net</th>
                         <th class="text-center">Status</th>
                         <th class="text-center">HVI</th>
-                        <th>Action</th>
+                        <th class="text-center">Action</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -123,24 +137,24 @@
                             var priceCkg = CalcPriceCkg(lot);
                             var priceComm = priceCkg - commissionPercent;
                             var priceNet = priceComm;
-                            <tr class="@(selectedLotIds.Contains(lot.Id) ? "table-info" : "")">
+                            <tr class="@(selectedLotIds.Contains(lot.Id) ? "row-selected" : "")">
                                 <td><input type="checkbox" checked="@selectedLotIds.Contains(lot.Id)" @onchange="e => ToggleLot(lot.Id, (bool)(e.Value ?? false))" /></td>
-                                <td>@(stt++)</td>
-                                <td><strong>@lot.LotCode</strong></td>
-                                <td>@lot.Shipper?.Name</td>
-                                <td>@lot.Origin</td>
-                                <td>@lot.CropYear</td>
-                                <td>@lot.Type @lot.SpecialSpec</td>
-                                <td>@lot.ShipmentDateText</td>
-                                <td class="text-end">@lot.QuantityOriginal.ToString("F0")</td>
-                                <td class="text-end">@lot.QuantityAvailable.ToString("F0")</td>
-                                <td>@hvi?.Micronaire?.ToString("F2")</td>
-                                <td>@hvi?.Length?.ToString("F2")</td>
-                                <td>@hvi?.StrengthGPT?.ToString("F1")</td>
-                                <td class="text-end">@((lot.BasisCents * 100m).ToString("F0"))</td>
-                                <td class="text-end fw-bold">@priceCkg.ToString("F2")</td>
-                                <td class="text-end">@priceComm.ToString("F2")</td>
-                                <td class="text-end">@priceNet.ToString("F2")</td>
+                                <td class="text-muted">@(stt++)</td>
+                                <td class="col-info"><strong>@lot.LotCode</strong></td>
+                                <td class="col-info text-truncate" style="max-width:120px" title="@lot.Shipper?.Name">@lot.Shipper?.Name</td>
+                                <td class="col-info">@lot.Origin</td>
+                                <td class="col-info">@lot.CropYear</td>
+                                <td class="col-info text-truncate" style="max-width:200px" title="@lot.Type @lot.SpecialSpec">@lot.Type @lot.SpecialSpec</td>
+                                <td class="col-info">@lot.ShipmentDateText</td>
+                                <td class="col-qty text-end">@lot.QuantityOriginal.ToString("F0")</td>
+                                <td class="col-qty text-end fw-bold">@lot.QuantityAvailable.ToString("F0")</td>
+                                <td class="col-hvi text-center" style="border-left:2px solid #ffc107">@hvi?.Micronaire?.ToString("F1")</td>
+                                <td class="col-hvi text-center">@hvi?.Length?.ToString("F2")</td>
+                                <td class="col-hvi text-center" style="border-right:2px solid #ffc107">@hvi?.StrengthGPT?.ToString("F1")</td>
+                                <td class="col-price text-end" style="border-left:2px solid #dc3545">@((lot.BasisCents * 100m).ToString("F0"))</td>
+                                <td class="col-price text-end fw-bold">@priceCkg.ToString("F2")</td>
+                                <td class="col-price text-end">@priceComm.ToString("F2")</td>
+                                <td class="col-price text-end" style="border-right:2px solid #dc3545">@priceNet.ToString("F2")</td>
                                 <td class="text-center">
                                     @switch (lot.Status)
                                     {
@@ -159,16 +173,16 @@
                                         <span class="text-muted">—</span>
                                     }
                                 </td>
-                                <td>
+                                <td class="text-center">
                                     <div class="btn-group btn-group-sm">
                                         @if (lot.Status == LotStatus.Available)
-                                        { <button class="btn btn-outline-warning btn-sm py-0" @onclick="() => SetStatus(lot, LotStatus.Reserved)">Resv</button> }
+                                        { <button class="btn btn-outline-warning btn-sm py-0 px-1" @onclick="() => SetStatus(lot, LotStatus.Reserved)" title="Reserve">R</button> }
                                         @if (lot.Status == LotStatus.Reserved)
-                                        { <button class="btn btn-outline-secondary btn-sm py-0" @onclick="() => SetStatus(lot, LotStatus.Sold)">Sold</button>
-                                          <button class="btn btn-outline-success btn-sm py-0" @onclick="() => SetStatus(lot, LotStatus.Available)">Open</button> }
+                                        { <button class="btn btn-outline-secondary btn-sm py-0 px-1" @onclick="() => SetStatus(lot, LotStatus.Sold)" title="Sold">S</button>
+                                          <button class="btn btn-outline-success btn-sm py-0 px-1" @onclick="() => SetStatus(lot, LotStatus.Available)" title="Open">O</button> }
                                         @if (lot.Status == LotStatus.Sold)
-                                        { <button class="btn btn-outline-success btn-sm py-0" @onclick="() => SetStatus(lot, LotStatus.Available)">Open</button> }
-                                        <button class="btn btn-outline-danger btn-sm py-0" @onclick="() => DeleteLot(lot)">Xóa</button>
+                                        { <button class="btn btn-outline-success btn-sm py-0 px-1" @onclick="() => SetStatus(lot, LotStatus.Available)" title="Open">O</button> }
+                                        <button class="btn btn-outline-danger btn-sm py-0 px-1" @onclick="() => DeleteLot(lot)" title="Xóa">×</button>
                                     </div>
                                 </td>
                             </tr>

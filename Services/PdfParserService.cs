@@ -1,4 +1,5 @@
 using CBAS.Web.Models;
+using CBAS.Web.DTOs;
 using CBAS.Web.Services.Parsers;
 using UglyToad.PdfPig;
 using UglyToad.PdfPig.Content;
@@ -20,9 +21,11 @@ public class OfferParseResult
 public class PdfParserService : IPdfParserService
 {
     private readonly List<IShipperParser> _parsers;
+    private readonly IClaudeParserService _claudeParser;
 
-    public PdfParserService()
+    public PdfParserService(IClaudeParserService claudeParser)
     {
+        _claudeParser = claudeParser;
         _parsers = new List<IShipperParser>
         {
             new ToyoshimaParser(),
@@ -115,6 +118,112 @@ public class PdfParserService : IPdfParserService
         var leafMatch = Regex.Match(text, @"(?:Leaf|Lf)[:\s]+(\d+\.?\d*)", RegexOptions.IgnoreCase);
         if (leafMatch.Success && decimal.TryParse(leafMatch.Groups[1].Value, NumberStyles.Any, CultureInfo.InvariantCulture, out var leaf))
             report.Leaf = leaf;
+    }
+
+    public async Task<OfferParseResult> ParseOfferPdfWithAIAsync(Stream pdfStream, int offerId, string fileName, int? shipperId)
+    {
+        var rawText = ExtractTextFromPdf(pdfStream);
+
+        // AI primary: try Claude first
+        if (_claudeParser.IsAvailable)
+        {
+            try
+            {
+                Console.WriteLine($"[AI Parser] Attempting Claude parse for: {fileName}");
+                var aiResult = await _claudeParser.ParseOfferTextAsync(rawText, shipperId);
+                if (aiResult != null && aiResult.Lots.Count > 0)
+                {
+                    Console.WriteLine($"[AI Parser] Success: {aiResult.Lots.Count} lots from {aiResult.Shipper}");
+                    return ConvertAIResult(aiResult, offerId, rawText);
+                }
+                Console.WriteLine("[AI Parser] No lots returned, falling back to regex");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[AI Parser] Error: {ex.Message}, falling back to regex");
+            }
+        }
+
+        // Fallback: regex parsers
+        pdfStream.Position = 0;
+        return ParseOfferPdfInternal(pdfStream, offerId, fileName);
+    }
+
+    private string ExtractTextFromPdf(Stream pdfStream)
+    {
+        using var document = PdfDocument.Open(pdfStream);
+        var allRows = new List<string>();
+        foreach (var page in document.GetPages())
+        {
+            var words = page.GetWords().ToList();
+            if (words.Count == 0) continue;
+            var rows = words
+                .GroupBy(w => Math.Round(w.BoundingBox.Bottom, 0))
+                .OrderByDescending(g => g.Key)
+                .Select(g => string.Join(" ", g.OrderBy(w => w.BoundingBox.Left).Select(w => w.Text)));
+            allRows.AddRange(rows);
+        }
+        return string.Join("\n", allRows);
+    }
+
+    private OfferParseResult ConvertAIResult(ClaudeOfferResponse aiResult, int offerId, string rawText)
+    {
+        var result = new OfferParseResult
+        {
+            DetectedShipper = aiResult.Shipper,
+            RawText = rawText
+        };
+
+        if (aiResult.IceJul26.HasValue)
+            result.ICESettlements["JUL'26"] = aiResult.IceJul26.Value;
+
+        if (!string.IsNullOrEmpty(aiResult.OfferDate) &&
+            DateTime.TryParse(aiResult.OfferDate, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
+            result.OfferDate = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+
+        foreach (var lot in aiResult.Lots)
+        {
+            var offerLot = new OfferLot
+            {
+                OfferId = offerId,
+                Origin = aiResult.Shipper,
+                Quantity = lot.QuantityTan,
+                Type = lot.LoaiBong ?? lot.TypeAllBci ?? string.Empty,
+                SpecialSpec = BuildSpecialSpec(lot),
+                ColorSpec = lot.MauSacColorGrade,
+                LeafSpec = lot.TapLeaf,
+                LengthSpec = lot.StapleChieuDai,
+                MicronaireSpec = lot.Micronaire,
+                StrengthSpec = lot.StrGptCuongLuc,
+                BasisCents = lot.Basis ?? 0,
+                SettlementMonth = lot.FutureMonth,
+                OutrightPrice = lot.FixPriceBasis ?? 0,
+                ShipmentDateText = lot.ShipmentGiaoHang,
+            };
+
+            // Calculate price if basis available
+            if (lot.Basis.HasValue && aiResult.IceJul26.HasValue)
+            {
+                offerLot.PriceCentsPerLb = aiResult.IceJul26.Value + lot.Basis.Value;
+            }
+            else if (lot.FixPriceBasis.HasValue)
+            {
+                offerLot.PriceCentsPerLb = lot.FixPriceBasis.Value;
+            }
+
+            result.Lots.Add(offerLot);
+        }
+
+        return result;
+    }
+
+    private static string? BuildSpecialSpec(ClaudeOfferLot lot)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrEmpty(lot.CapBongGrade)) parts.Add(lot.CapBongGrade);
+        if (!string.IsNullOrEmpty(lot.KieuBong)) parts.Add(lot.KieuBong);
+        if (!string.IsNullOrEmpty(lot.TypeAllBci)) parts.Add(lot.TypeAllBci);
+        return parts.Count > 0 ? string.Join(" | ", parts) : null;
     }
 
     private OfferParseResult ParseOfferPdfInternal(Stream pdfStream, int offerId, string fileName)

@@ -17,6 +17,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<HVIReport> HVIReports { get; set; } = null!;
     public DbSet<ProcessedOutput> ProcessedOutputs { get; set; } = null!;
     public DbSet<User> Users { get; set; } = null!;
+    public DbSet<ShipperSample> ShipperSamples { get; set; } = null!;
+    public DbSet<AppSetting> AppSettings { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -60,5 +62,9 @@ public class ApplicationDbContext : DbContext
             .WithMany(s => s.Lots)
             .HasForeignKey(l => l.ShipperId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<ShipperSample>()
+            .HasIndex(ss => ss.ShipperId)
+            .IsUnique();
     }
 }

@@ -76,6 +76,26 @@
                         }
                     </div>
 
+                    <div class="mb-3 p-3 border rounded bg-light">
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" @bind="isFirstTimeShipper" id="chkFirstTime" />
+                            <label class="form-check-label" for="chkFirstTime">
+                                <strong>Lần đầu với shipper này</strong> — Upload Excel mẫu để AI học format
+                            </label>
+                        </div>
+                        @if (isFirstTimeShipper)
+                        {
+                            <InputFile class="form-control" OnChange="@OnSampleExcelSelected" accept=".xlsx,.xls" />
+                            @if (!string.IsNullOrEmpty(sampleExcelFileName))
+                            {
+                                <div class="mt-2">
+                                    <span class="badge bg-info">📊 @sampleExcelFileName</span>
+                                </div>
+                            }
+                            <small class="text-muted d-block mt-1">Upload file Excel kết quả mong muốn. AI sẽ học từ cặp PDF + Excel này.</small>
+                        }
+                    </div>
+
                     <button type="submit" class="btn btn-success btn-lg" disabled="@isProcessing">
                         @if (isProcessing)
                         {
@@ -419,6 +439,9 @@
         OfferDate = DateTime.UtcNow.Date
     };
     private List<string> hviFileNames = new();
+    private bool isFirstTimeShipper = false;
+    private string? sampleExcelFileName;
+    private MemoryStream? sampleExcelStream;
 
     protected override async Task OnInitializedAsync()
     {
@@ -509,6 +532,27 @@
         }
     }
 
+    private async Task OnSampleExcelSelected(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            if (file != null)
+            {
+                sampleExcelFileName = file.Name;
+                var ms = new MemoryStream();
+                using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+                await stream.CopyToAsync(ms);
+                ms.Position = 0;
+                sampleExcelStream = ms;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Lỗi load file Excel mẫu: {ex.Message}";
+        }
+    }
+
     // ── Step 1 → Step 2 ──
     private async Task HandleUpload()
     {
@@ -530,6 +574,13 @@
             StateHasChanged();
 
             currentOfferId = await OfferService.ProcessOfferAsync(uploadModel);
+
+            // Save AI sample if first-time shipper
+            if (isFirstTimeShipper && sampleExcelStream != null && uploadModel.OfferPdfStream != null)
+            {
+                await SaveShipperSample();
+            }
+
             hviInputs = await OfferService.GetHVIForReviewAsync(currentOfferId);
 
             // Auto-expand all lots
@@ -731,6 +782,108 @@
         showRawText.Clear();
         outputGroups = null;
         errorMessage = null;
+    }
+
+    // ── Save Shipper Sample for AI Few-Shot ──
+    private async Task SaveShipperSample()
+    {
+        try
+        {
+            var shipper = await DbContext.Shippers
+                .FirstOrDefaultAsync(s => s.Name == uploadModel.SupplierName);
+            if (shipper == null) return;
+
+            var existing = await DbContext.ShipperSamples
+                .FirstOrDefaultAsync(ss => ss.ShipperId == shipper.ShipperId);
+
+            uploadModel.OfferPdfStream!.Position = 0;
+            using var pdfMs = new MemoryStream();
+            await uploadModel.OfferPdfStream.CopyToAsync(pdfMs);
+            var pdfBytes = pdfMs.ToArray();
+
+            sampleExcelStream!.Position = 0;
+            var excelBytes = sampleExcelStream.ToArray();
+
+            // Extract text from PDF for prompt
+            uploadModel.OfferPdfStream.Position = 0;
+            string? extractedText = null;
+            try
+            {
+                using var doc = UglyToad.PdfPig.PdfDocument.Open(uploadModel.OfferPdfStream);
+                var rows = new List<string>();
+                foreach (var page in doc.GetPages())
+                {
+                    var words = page.GetWords().ToList();
+                    if (words.Count == 0) continue;
+                    var pageRows = words
+                        .GroupBy(w => Math.Round(w.BoundingBox.Bottom, 0))
+                        .OrderByDescending(g => g.Key)
+                        .Select(g => string.Join(" ", g.OrderBy(w => w.BoundingBox.Left).Select(w => w.Text)));
+                    rows.AddRange(pageRows);
+                }
+                extractedText = string.Join("\n", rows);
+            }
+            catch { }
+
+            // Extract Excel content as JSON for prompt
+            string? excelJson = null;
+            try
+            {
+                sampleExcelStream.Position = 0;
+                using var workbook = new ClosedXML.Excel.XLWorkbook(sampleExcelStream);
+                var ws = workbook.Worksheets.First();
+                var rowsData = new List<Dictionary<string, string>>();
+                var headers = new List<string>();
+                var lastRow = ws.LastRowUsed()?.RowNumber() ?? 0;
+                var lastCol = ws.LastColumnUsed()?.ColumnNumber() ?? 0;
+
+                for (int c = 1; c <= lastCol; c++)
+                    headers.Add(ws.Cell(1, c).GetString());
+
+                for (int r = 2; r <= Math.Min(lastRow, 50); r++)
+                {
+                    var row = new Dictionary<string, string>();
+                    for (int c = 1; c <= lastCol; c++)
+                        row[headers[c - 1]] = ws.Cell(r, c).GetString();
+                    rowsData.Add(row);
+                }
+                excelJson = System.Text.Json.JsonSerializer.Serialize(rowsData);
+            }
+            catch { }
+
+            if (existing != null)
+            {
+                existing.SampleOfferPdf = pdfBytes;
+                existing.SampleOfferFileName = uploadModel.OfferFileName;
+                existing.SampleExcelResult = excelBytes;
+                existing.SampleExcelFileName = sampleExcelFileName;
+                existing.ExtractedPdfText = extractedText;
+                existing.ExtractedExcelJson = excelJson;
+                existing.UpdatedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                DbContext.ShipperSamples.Add(new Models.ShipperSample
+                {
+                    ShipperId = shipper.ShipperId,
+                    SampleOfferPdf = pdfBytes,
+                    SampleOfferFileName = uploadModel.OfferFileName,
+                    SampleExcelResult = excelBytes,
+                    SampleExcelFileName = sampleExcelFileName,
+                    ExtractedPdfText = extractedText,
+                    ExtractedExcelJson = excelJson,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                });
+            }
+
+            await DbContext.SaveChangesAsync();
+            Console.WriteLine($"[AI Sample] Saved sample for shipper: {uploadModel.SupplierName}");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[AI Sample] Error saving sample: {ex.Message}");
+        }
     }
 
     // ── Helpers ──

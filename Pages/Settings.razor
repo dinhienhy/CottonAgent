@@ -1,0 +1,206 @@
+@page "/settings"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using CBAS.Web.Data
+@using CBAS.Web.Models
+@using CBAS.Web.Services
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext DbContext
+@inject IClaudeParserService ClaudeParser
+
+<PageTitle>Cài đặt</PageTitle>
+
+<div class="container mt-4" style="max-width: 700px;">
+    <h3 class="mb-4">Cài đặt hệ thống</h3>
+
+    <div class="card mb-4">
+        <div class="card-header bg-dark text-white">
+            <h5 class="mb-0">Claude AI Parser</h5>
+        </div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label class="form-label fw-bold">Anthropic API Key</label>
+                <div class="input-group">
+                    <input type="@(showKey ? "text" : "password")" class="form-control font-monospace"
+                           @bind="apiKey" placeholder="sk-ant-api03-..." />
+                    <button class="btn btn-outline-secondary" type="button" @onclick="() => showKey = !showKey">
+                        @(showKey ? "Ẩn" : "Hiện")
+                    </button>
+                </div>
+                <small class="text-muted">Lấy key tại <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a></small>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">Model</label>
+                <select class="form-select" @bind="modelName">
+                    <option value="claude-sonnet-4-20250514">Claude Sonnet 4 (khuyên dùng)</option>
+                    <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                </select>
+            </div>
+
+            <button class="btn btn-primary" @onclick="SaveSettings" disabled="@isSaving">
+                @if (isSaving)
+                {
+                    <span class="spinner-border spinner-border-sm me-1"></span>
+                }
+                Lưu cài đặt
+            </button>
+
+            @if (ClaudeParser.IsAvailable)
+            {
+                <span class="badge bg-success ms-3">AI Parser: Sẵn sàng</span>
+            }
+            else
+            {
+                <span class="badge bg-warning text-dark ms-3">AI Parser: Chưa có API Key</span>
+            }
+
+            @if (!string.IsNullOrEmpty(message))
+            {
+                <div class="alert @(isError ? "alert-danger" : "alert-success") mt-3 mb-0">@message</div>
+            }
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header bg-dark text-white">
+            <h5 class="mb-0">Shipper Samples (AI Few-Shot)</h5>
+        </div>
+        <div class="card-body">
+            @if (samples.Any())
+            {
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Shipper</th>
+                            <th>PDF mẫu</th>
+                            <th>Excel mẫu</th>
+                            <th>Cập nhật</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in samples)
+                        {
+                            <tr>
+                                <td>@s.ShipperName</td>
+                                <td><small>@s.PdfFileName</small></td>
+                                <td><small>@s.ExcelFileName</small></td>
+                                <td><small>@s.UpdatedAt.ToString("dd/MM/yyyy HH:mm")</small></td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteSample(s.Id)">Xóa</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <p class="text-muted mb-0">Chưa có mẫu nào. Upload mẫu tại trang Offer Processor (tick "Lần đầu với shipper này").</p>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private string apiKey = "";
+    private string modelName = "claude-sonnet-4-20250514";
+    private bool showKey = false;
+    private bool isSaving = false;
+    private string? message;
+    private bool isError = false;
+    private List<SampleInfo> samples = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var keySetting = await DbContext.AppSettings.FindAsync("ANTHROPIC_API_KEY");
+        if (keySetting != null)
+            apiKey = keySetting.Value ?? "";
+
+        var modelSetting = await DbContext.AppSettings.FindAsync("ANTHROPIC_MODEL");
+        if (modelSetting != null)
+            modelName = modelSetting.Value ?? "claude-sonnet-4-20250514";
+
+        await LoadSamples();
+    }
+
+    private async Task SaveSettings()
+    {
+        isSaving = true;
+        message = null;
+        StateHasChanged();
+
+        try
+        {
+            await UpsertSetting("ANTHROPIC_API_KEY", apiKey.Trim());
+            await UpsertSetting("ANTHROPIC_MODEL", modelName);
+            await DbContext.SaveChangesAsync();
+            message = "Đã lưu cài đặt thành công!";
+            isError = false;
+        }
+        catch (Exception ex)
+        {
+            message = $"Lỗi: {ex.Message}";
+            isError = true;
+        }
+        finally
+        {
+            isSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task UpsertSetting(string key, string value)
+    {
+        var existing = await DbContext.AppSettings.FindAsync(key);
+        if (existing != null)
+        {
+            existing.Value = value;
+            existing.UpdatedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            DbContext.AppSettings.Add(new AppSetting
+            {
+                Key = key,
+                Value = value,
+                UpdatedAt = DateTime.UtcNow
+            });
+        }
+    }
+
+    private async Task LoadSamples()
+    {
+        samples = await DbContext.ShipperSamples
+            .Include(ss => ss.Shipper)
+            .Select(ss => new SampleInfo
+            {
+                Id = ss.Id,
+                ShipperName = ss.Shipper.Name,
+                PdfFileName = ss.SampleOfferFileName ?? "—",
+                ExcelFileName = ss.SampleExcelFileName ?? "—",
+                UpdatedAt = ss.UpdatedAt
+            })
+            .ToListAsync();
+    }
+
+    private async Task DeleteSample(int id)
+    {
+        var sample = await DbContext.ShipperSamples.FindAsync(id);
+        if (sample != null)
+        {
+            DbContext.ShipperSamples.Remove(sample);
+            await DbContext.SaveChangesAsync();
+            await LoadSamples();
+        }
+    }
+
+    private class SampleInfo
+    {
+        public int Id { get; set; }
+        public string ShipperName { get; set; } = "";
+        public string PdfFileName { get; set; } = "";
+        public string ExcelFileName { get; set; } = "";
+        public DateTime UpdatedAt { get; set; }
+    }
+}

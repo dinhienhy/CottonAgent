@@ -2,6 +2,37 @@
 
 All notable changes to the Cotton Broker Automation System (CBAS) will be documented in this file.
 
+## [2.0.0] - 2026-05-07
+
+### Added - AI Universal Offer Parser (Claude API + Few-Shot Learning)
+
+#### AI Parser Core
+- **Claude API integration** — gọi Anthropic Claude API để parse Offer PDF
+- **Few-shot learning** — lần đầu upload Excel mẫu → AI học format, lần sau tự động parse
+- **Hybrid strategy** — AI là primary parser, regex parsers (Toyoshima/Olam/Brighann) là fallback
+- **System prompt chuyên biệt** — decode đúng spec bông Mỹ (GC/SM/EMOT, G5≠Color Grade)
+
+#### New Model: ShipperSample
+- Lưu cặp PDF mẫu + Excel kết quả mong muốn per shipper (1 cặp/shipper)
+- Tự extract PDF text + Excel JSON để dùng trong prompt (few-shot examples)
+- Migration: `20260506100000_AddShipperSamples`
+
+#### New Services
+- `IClaudeParserService` / `ClaudeParserService` — gọi Claude API, parse JSON response
+- `PdfParserService.ParseOfferPdfWithAIAsync()` — AI primary → regex fallback
+- `ClaudeOfferResponse` DTO — JSON schema cho AI response
+
+#### UI Updates (OfferProcessor.razor)
+- Checkbox "Lần đầu với shipper này" → upload Excel mẫu
+- Tự động lưu ShipperSample khi submit
+- Extract Excel content (ClosedXML) thành JSON cho few-shot prompt
+
+#### Config
+- `ANTHROPIC_API_KEY` environment variable
+- `Anthropic:Model` in appsettings.json (default: claude-sonnet-4-20250514)
+
+---
+
 ## [1.3.0] - 2026-05-04
 
 ### Upgraded - Quản lý Lot hàng & Tạo Output Chào Hàng

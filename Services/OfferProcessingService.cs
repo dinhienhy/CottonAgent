@@ -97,14 +97,16 @@ public class OfferProcessingService : IOfferProcessingService
 
         await _context.SaveChangesAsync();
 
-        // STEP 2: Parse Offer PDF
+        // STEP 2: Parse Offer PDF (AI primary, regex fallback)
         OfferParseResult? parseResult = null;
         if (uploadDto.OfferPdfStream != null)
         {
             try
             {
                 uploadDto.OfferPdfStream.Position = 0;
-                parseResult = _pdfParser.ParseOfferPdfFull(uploadDto.OfferPdfStream, offer.OfferId, uploadDto.OfferFileName ?? "unknown.pdf");
+                parseResult = await _pdfParser.ParseOfferPdfWithAIAsync(
+                    uploadDto.OfferPdfStream, offer.OfferId,
+                    uploadDto.OfferFileName ?? "unknown.pdf", shipper.ShipperId);
                 Console.WriteLine($"[{parseResult.DetectedShipper}] Parsed {parseResult.Lots.Count} lots, ICE settlements: {string.Join(", ", parseResult.ICESettlements.Select(kv => $"{kv.Key}={kv.Value}"))}");
 
                 // Store ICE settlements on the offer

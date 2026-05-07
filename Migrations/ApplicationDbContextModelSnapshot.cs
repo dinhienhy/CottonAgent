@@ -22,6 +22,15 @@ namespace CBAS.Web.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("CBAS.Web.Models.AppSetting", b =>
+                {
+                    b.Property<string>("Key").HasMaxLength(100).HasColumnType("character varying(100)");
+                    b.Property<DateTime>("UpdatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<string>("Value").HasColumnType("text");
+                    b.HasKey("Key");
+                    b.ToTable("AppSettings");
+                });
+
             modelBuilder.Entity("CBAS.Web.Models.HVIReport", b =>
                 {
                     b.Property<int>("HVIId")
@@ -131,6 +140,26 @@ namespace CBAS.Web.Migrations
                     b.ToTable("OfferLots");
                 });
 
+            modelBuilder.Entity("CBAS.Web.Models.ShipperSample", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                    b.Property<DateTime>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<string>("ExtractedExcelJson").HasColumnType("text");
+                    b.Property<string>("ExtractedPdfText").HasColumnType("text");
+                    b.Property<byte[]>("SampleExcelResult").IsRequired().HasColumnType("bytea");
+                    b.Property<string>("SampleExcelFileName").HasMaxLength(200).HasColumnType("character varying(200)");
+                    b.Property<byte[]>("SampleOfferPdf").IsRequired().HasColumnType("bytea");
+                    b.Property<string>("SampleOfferFileName").HasMaxLength(200).HasColumnType("character varying(200)");
+                    b.Property<int>("ShipperId").HasColumnType("integer");
+                    b.Property<DateTime>("UpdatedAt").HasColumnType("timestamp with time zone");
+                    b.HasKey("Id");
+                    b.HasIndex("ShipperId").IsUnique();
+                    b.ToTable("ShipperSamples");
+                });
+
             modelBuilder.Entity("CBAS.Web.Models.Shipper", b =>
                 {
                     b.Property<int>("ShipperId")
@@ -225,6 +254,16 @@ namespace CBAS.Web.Migrations
                         .IsRequired();
                     b.Navigation("HVIReport");
                     b.Navigation("LatestOffer");
+                    b.Navigation("Shipper");
+                });
+
+            modelBuilder.Entity("CBAS.Web.Models.ShipperSample", b =>
+                {
+                    b.HasOne("CBAS.Web.Models.Shipper", "Shipper")
+                        .WithMany()
+                        .HasForeignKey("ShipperId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                     b.Navigation("Shipper");
                 });
 

@@ -94,18 +94,148 @@ Output BẮT BUỘC là JSON hợp lệ, không thêm bất kỳ text nào khác
 
     public async Task<ClaudeOfferResponse?> ParseOfferTextAsync(string pdfText, int? shipperId)
     {
+        var (result, _) = await ParseOfferWithLogAsync(pdfText, shipperId);
+        return result;
+    }
+
+    public async Task<(ClaudeOfferResponse? Result, ClaudeParseLog Log)> ParseOfferWithLogAsync(string pdfText, int? shipperId)
+    {
+        var log = new ClaudeParseLog { Used = true, Status = "processing" };
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
         var apiKey = GetApiKey();
         if (string.IsNullOrEmpty(apiKey))
-            return null;
+        {
+            log.Status = "error";
+            log.ErrorMessage = "Không tìm thấy API Key (env/config/DB)";
+            log.AddStep("API Key not found");
+            return (null, log);
+        }
+        log.AddStep("API Key OK");
+
+        var model = GetSettingFromDb("ANTHROPIC_MODEL")
+                    ?? _config["Anthropic:Model"]
+                    ?? "claude-sonnet-4-20250514";
+        log.Model = model;
+        log.AddStep($"Model: {model}");
 
         var fewShotExample = await GetFewShotExample(shipperId);
+        log.HasFewShot = !string.IsNullOrEmpty(fewShotExample);
+        log.AddStep(log.HasFewShot ? "Few-shot sample found" : "No few-shot sample (new shipper)");
+
         var userMessage = BuildUserMessage(pdfText, fewShotExample);
+        log.AddStep($"Prompt built ({userMessage.Length:N0} chars). Calling Claude API...");
 
-        var response = await CallClaudeApi(userMessage, apiKey);
-        if (response == null)
-            return null;
+        try
+        {
+            var client = _httpClientFactory.CreateClient("Claude");
+            client.DefaultRequestHeaders.Add("x-api-key", apiKey);
+            client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
 
-        return ParseClaudeResponse(response);
+            var requestBody = new
+            {
+                model = model,
+                max_tokens = 8192,
+                system = SystemPrompt,
+                messages = new[]
+                {
+                    new { role = "user", content = userMessage }
+                }
+            };
+
+            var json = JsonSerializer.Serialize(requestBody);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await client.PostAsync("https://api.anthropic.com/v1/messages", content);
+            var responseJson = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                log.Status = "error";
+                log.ErrorMessage = $"HTTP {(int)response.StatusCode}: {response.StatusCode}";
+                log.RawResponse = responseJson.Length > 2000 ? responseJson[..2000] : responseJson;
+                log.AddStep($"API Error: {log.ErrorMessage}");
+                sw.Stop();
+                log.ElapsedSeconds = sw.Elapsed.TotalSeconds;
+                return (null, log);
+            }
+
+            log.AddStep("API response received");
+
+            // Parse response metadata
+            using var doc = JsonDocument.Parse(responseJson);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("usage", out var usage))
+            {
+                log.InputTokens = usage.TryGetProperty("input_tokens", out var it) ? it.GetInt32() : null;
+                log.OutputTokens = usage.TryGetProperty("output_tokens", out var ot) ? ot.GetInt32() : null;
+            }
+            if (root.TryGetProperty("stop_reason", out var sr))
+            {
+                log.StopReason = sr.GetString();
+            }
+
+            log.AddStep($"Tokens: in={log.InputTokens}, out={log.OutputTokens}, stop={log.StopReason}");
+
+            if (log.StopReason == "max_tokens")
+            {
+                log.AddStep("WARNING: Response bị cắt do hết max_tokens!");
+            }
+
+            // Extract text content
+            string? textContent = null;
+            var contentArray = root.GetProperty("content");
+            foreach (var block in contentArray.EnumerateArray())
+            {
+                if (block.GetProperty("type").GetString() == "text")
+                {
+                    textContent = block.GetProperty("text").GetString();
+                    break;
+                }
+            }
+
+            if (string.IsNullOrEmpty(textContent))
+            {
+                log.Status = "error";
+                log.ErrorMessage = "No text content in response";
+                log.RawResponse = responseJson.Length > 2000 ? responseJson[..2000] : responseJson;
+                log.AddStep("ERROR: No text content block");
+                sw.Stop();
+                log.ElapsedSeconds = sw.Elapsed.TotalSeconds;
+                return (null, log);
+            }
+
+            log.RawResponse = textContent.Length > 3000 ? textContent[..3000] + "\n...[truncated]" : textContent;
+
+            // Parse JSON result
+            var parsed = ParseClaudeResponse(textContent);
+            if (parsed == null)
+            {
+                log.Status = "error";
+                log.ErrorMessage = "JSON parse failed";
+                log.AddStep("ERROR: Cannot parse Claude response as JSON");
+                sw.Stop();
+                log.ElapsedSeconds = sw.Elapsed.TotalSeconds;
+                return (null, log);
+            }
+
+            log.LotsFound = parsed.Lots.Count;
+            log.Status = parsed.Lots.Count > 0 ? "success" : "error";
+            log.AddStep($"Parsed OK: {parsed.Lots.Count} lots, shipper={parsed.Shipper}");
+            sw.Stop();
+            log.ElapsedSeconds = sw.Elapsed.TotalSeconds;
+            return (parsed, log);
+        }
+        catch (Exception ex)
+        {
+            log.Status = "error";
+            log.ErrorMessage = ex.Message;
+            log.AddStep($"EXCEPTION: {ex.Message}");
+            sw.Stop();
+            log.ElapsedSeconds = sw.Elapsed.TotalSeconds;
+            return (null, log);
+        }
     }
 
     private async Task<string?> GetFewShotExample(int? shipperId)
@@ -162,61 +292,6 @@ Output BẮT BUỘC là JSON hợp lệ, không thêm bất kỳ text nào khác
         return sb.ToString();
     }
 
-    private async Task<string?> CallClaudeApi(string userMessage, string apiKey)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("Claude");
-            client.DefaultRequestHeaders.Add("x-api-key", apiKey);
-            client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
-
-            var model = GetSettingFromDb("ANTHROPIC_MODEL")
-                        ?? _config["Anthropic:Model"]
-                        ?? "claude-sonnet-4-20250514";
-
-            var requestBody = new
-            {
-                model = model,
-                max_tokens = 8192,
-                system = SystemPrompt,
-                messages = new[]
-                {
-                    new { role = "user", content = userMessage }
-                }
-            };
-
-            var json = JsonSerializer.Serialize(requestBody);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            var response = await client.PostAsync("https://api.anthropic.com/v1/messages", content);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var errorBody = await response.Content.ReadAsStringAsync();
-                Console.WriteLine($"[Claude API] Error {response.StatusCode}: {errorBody}");
-                return null;
-            }
-
-            var responseJson = await response.Content.ReadAsStringAsync();
-            using var doc = JsonDocument.Parse(responseJson);
-
-            var contentArray = doc.RootElement.GetProperty("content");
-            foreach (var block in contentArray.EnumerateArray())
-            {
-                if (block.GetProperty("type").GetString() == "text")
-                {
-                    return block.GetProperty("text").GetString();
-                }
-            }
-
-            return null;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[Claude API] Exception: {ex.Message}");
-            return null;
-        }
-    }
 
     private ClaudeOfferResponse? ParseClaudeResponse(string responseText)
     {

@@ -77,23 +77,15 @@
                     </div>
 
                     <div class="mb-3 p-3 border rounded bg-light">
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="checkbox" @bind="isFirstTimeShipper" id="chkFirstTime" />
-                            <label class="form-check-label" for="chkFirstTime">
-                                <strong>Lần đầu với shipper này</strong> — Upload Excel mẫu để AI học format
-                            </label>
-                        </div>
-                        @if (isFirstTimeShipper)
+                        <label class="form-label fw-bold mb-1">Excel mẫu (AI Few-Shot Learning)</label>
+                        <InputFile class="form-control" OnChange="@OnSampleExcelSelected" accept=".xlsx,.xls" />
+                        @if (!string.IsNullOrEmpty(sampleExcelFileName))
                         {
-                            <InputFile class="form-control" OnChange="@OnSampleExcelSelected" accept=".xlsx,.xls" />
-                            @if (!string.IsNullOrEmpty(sampleExcelFileName))
-                            {
-                                <div class="mt-2">
-                                    <span class="badge bg-info">📊 @sampleExcelFileName</span>
-                                </div>
-                            }
-                            <small class="text-muted d-block mt-1">Upload file Excel kết quả mong muốn. AI sẽ học từ cặp PDF + Excel này.</small>
+                            <div class="mt-2">
+                                <span class="badge bg-info">@sampleExcelFileName</span>
+                            </div>
                         }
+                        <small class="text-muted d-block mt-1">Upload file Excel kết quả mong muốn. AI sẽ học từ cặp PDF + Excel này (chỉ cần 1 lần/shipper).</small>
                     </div>
 
                     <button type="submit" class="btn btn-success btn-lg" disabled="@isProcessing">
@@ -108,6 +100,61 @@
                         }
                     </button>
                 </EditForm>
+            </div>
+        </div>
+    }
+
+    @* ══════════════════════ AI LOG PANEL ══════════════════════ *@
+    @if (aiLog != null)
+    {
+        <div class="card mb-3 @(aiLog.Status == "success" ? "border-success" : aiLog.Status == "error" ? "border-danger" : "border-secondary")">
+            <div class="card-header py-2 d-flex justify-content-between align-items-center @(aiLog.Status == "success" ? "bg-success text-white" : aiLog.Status == "error" ? "bg-danger text-white" : "bg-secondary text-white")">
+                <span>
+                    <strong>AI Parser Log</strong>
+                    @if (aiLog.Status == "success") { <text> — Thành công</text> }
+                    else if (aiLog.Status == "error") { <text> — Lỗi</text> }
+                    else if (!aiLog.Used) { <text> — Không dùng AI</text> }
+                </span>
+                <button class="btn btn-sm btn-outline-light" @onclick="() => showAiLogDetail = !showAiLogDetail">
+                    @(showAiLogDetail ? "Thu gọn" : "Chi tiết")
+                </button>
+            </div>
+            <div class="card-body py-2" style="font-size:0.8rem;">
+                <div class="row g-2 mb-2">
+                    <div class="col-auto"><span class="badge bg-dark">Model: @(aiLog.Model ?? "N/A")</span></div>
+                    <div class="col-auto"><span class="badge bg-info text-dark">Tokens: @(aiLog.InputTokens?.ToString("N0") ?? "—") in / @(aiLog.OutputTokens?.ToString("N0") ?? "—") out</span></div>
+                    <div class="col-auto"><span class="badge @(aiLog.StopReason == "max_tokens" ? "bg-warning text-dark" : "bg-secondary")">Stop: @(aiLog.StopReason ?? "—")</span></div>
+                    <div class="col-auto"><span class="badge bg-primary">@(aiLog.ElapsedSeconds.ToString("F1"))s</span></div>
+                    @if (aiLog.HasFewShot) { <div class="col-auto"><span class="badge bg-success">Few-Shot</span></div> }
+                    @if (aiLog.FellBackToRegex) { <div class="col-auto"><span class="badge bg-warning text-dark">Fallback → Regex</span></div> }
+                    @if (aiLog.LotsFound.HasValue) { <div class="col-auto"><span class="badge bg-success">@aiLog.LotsFound lots found</span></div> }
+                </div>
+
+                @if (!string.IsNullOrEmpty(aiLog.ErrorMessage))
+                {
+                    <div class="alert alert-danger py-1 px-2 mb-2 small"><strong>Error:</strong> @aiLog.ErrorMessage</div>
+                }
+
+                @if (showAiLogDetail)
+                {
+                    <div class="mb-2">
+                        <strong class="small">Process Steps:</strong>
+                        <ul class="list-unstyled mb-0 ms-2 small font-monospace" style="line-height:1.6">
+                            @foreach (var step in aiLog.Steps)
+                            {
+                                <li>@step</li>
+                            }
+                        </ul>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(aiLog.RawResponse))
+                    {
+                        <details>
+                            <summary class="small fw-bold cursor-pointer">Raw AI Response (click to expand)</summary>
+                            <pre class="bg-dark text-light p-2 rounded mt-1 small" style="max-height:300px; overflow:auto; white-space:pre-wrap; font-size:0.7rem;">@aiLog.RawResponse</pre>
+                        </details>
+                    }
+                }
             </div>
         </div>
     }
@@ -439,9 +486,10 @@
         OfferDate = DateTime.UtcNow.Date
     };
     private List<string> hviFileNames = new();
-    private bool isFirstTimeShipper = false;
     private string? sampleExcelFileName;
     private MemoryStream? sampleExcelStream;
+    private ClaudeParseLog? aiLog;
+    private bool showAiLogDetail = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -571,12 +619,18 @@
 
             isProcessing = true;
             errorMessage = null;
+            aiLog = null;
+            showAiLogDetail = false;
             StateHasChanged();
 
             currentOfferId = await OfferService.ProcessOfferAsync(uploadModel);
 
-            // Save AI sample if first-time shipper
-            if (isFirstTimeShipper && sampleExcelStream != null && uploadModel.OfferPdfStream != null)
+            // Capture AI processing log
+            aiLog = OfferService.LastAILog;
+            StateHasChanged();
+
+            // Save AI sample if Excel mẫu was uploaded
+            if (sampleExcelStream != null && uploadModel.OfferPdfStream != null)
             {
                 await SaveShipperSample();
             }

@@ -16,6 +16,7 @@ public class OfferParseResult
     public Dictionary<string, decimal> ICESettlements { get; set; } = new();
     public List<OfferLot> Lots { get; set; } = new();
     public string? RawText { get; set; }
+    public ClaudeParseLog? AILog { get; set; }
 }
 
 public class PdfParserService : IPdfParserService
@@ -130,23 +131,46 @@ public class PdfParserService : IPdfParserService
             try
             {
                 Console.WriteLine($"[AI Parser] Attempting Claude parse for: {fileName}");
-                var aiResult = await _claudeParser.ParseOfferTextAsync(rawText, shipperId);
+                var (aiResult, log) = await _claudeParser.ParseOfferWithLogAsync(rawText, shipperId);
                 if (aiResult != null && aiResult.Lots.Count > 0)
                 {
                     Console.WriteLine($"[AI Parser] Success: {aiResult.Lots.Count} lots from {aiResult.Shipper}");
-                    return ConvertAIResult(aiResult, offerId, rawText);
+                    var result = ConvertAIResult(aiResult, offerId, rawText);
+                    result.AILog = log;
+                    return result;
                 }
+                // AI failed or no lots
+                log.FellBackToRegex = true;
+                log.AddStep("Falling back to regex parser");
                 Console.WriteLine("[AI Parser] No lots returned, falling back to regex");
+                pdfStream.Position = 0;
+                var fallbackResult = ParseOfferPdfInternal(pdfStream, offerId, fileName);
+                fallbackResult.AILog = log;
+                return fallbackResult;
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[AI Parser] Error: {ex.Message}, falling back to regex");
+                var errorLog = new ClaudeParseLog
+                {
+                    Used = true, Status = "error", ErrorMessage = ex.Message, FellBackToRegex = true
+                };
+                errorLog.AddStep($"EXCEPTION: {ex.Message}");
+                errorLog.AddStep("Falling back to regex parser");
+                pdfStream.Position = 0;
+                var fallbackResult = ParseOfferPdfInternal(pdfStream, offerId, fileName);
+                fallbackResult.AILog = errorLog;
+                return fallbackResult;
             }
         }
 
-        // Fallback: regex parsers
+        // No AI available
+        var noAiLog = new ClaudeParseLog { Used = false, Status = "idle" };
+        noAiLog.AddStep("AI Parser not available (no API key). Using regex only.");
         pdfStream.Position = 0;
-        return ParseOfferPdfInternal(pdfStream, offerId, fileName);
+        var regexResult = ParseOfferPdfInternal(pdfStream, offerId, fileName);
+        regexResult.AILog = noAiLog;
+        return regexResult;
     }
 
     private string ExtractTextFromPdf(Stream pdfStream)

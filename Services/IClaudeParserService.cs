@@ -6,4 +6,5 @@ public interface IClaudeParserService
 {
     bool IsAvailable { get; }
     Task<ClaudeOfferResponse?> ParseOfferTextAsync(string pdfText, int? shipperId);
+    Task<(ClaudeOfferResponse? Result, ClaudeParseLog Log)> ParseOfferWithLogAsync(string pdfText, int? shipperId);
 }

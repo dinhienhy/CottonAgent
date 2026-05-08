@@ -15,6 +15,8 @@ public class OfferProcessingService : IOfferProcessingService
     private readonly IOcrService _ocrService;
     private const decimal LB_TO_KG = 2.20462m;
 
+    public ClaudeParseLog? LastAILog { get; private set; }
+
     public OfferProcessingService(
         ApplicationDbContext context,
         IPdfParserService pdfParser,
@@ -131,6 +133,9 @@ public class OfferProcessingService : IOfferProcessingService
                 
                 await _context.SaveChangesAsync();
                 Console.WriteLine("Lots saved");
+
+                // Store AI log for UI
+                LastAILog = parseResult.AILog;
             }
             catch (Exception ex)
             {

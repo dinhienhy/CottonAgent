@@ -27,6 +27,9 @@
             <button class="btn btn-success btn-sm text-nowrap" @onclick="ExportSelectedLots" disabled="@(!selectedLotIds.Any())">
                 Tạo Output (@selectedLotIds.Count)
             </button>
+            <button class="btn btn-danger btn-sm text-nowrap" @onclick="DeleteSelectedLots" disabled="@(!selectedLotIds.Any())">
+                Xóa (@selectedLotIds.Count)
+            </button>
         </div>
     </div>
 
@@ -327,6 +330,32 @@
         Context.Lots.Remove(lot);
         await Context.SaveChangesAsync();
         selectedLotIds.Remove(lot.Id);
+        await LoadLots();
+    }
+
+    private async Task DeleteSelectedLots()
+    {
+        if (!selectedLotIds.Any() || lots == null) return;
+
+        var confirmed = await JS.InvokeAsync<bool>("confirm", $"Xác nhận xóa {selectedLotIds.Count} lot đã chọn?");
+        if (!confirmed) return;
+
+        var toDelete = lots.Where(l => selectedLotIds.Contains(l.Id)).ToList();
+        foreach (var lot in toDelete)
+        {
+            var linkedOfferLots = await Context.OfferLots.Where(ol => ol.MasterLotId == lot.Id).ToListAsync();
+            foreach (var ol in linkedOfferLots)
+                ol.MasterLotId = null;
+
+            var linkedHvis = await Context.HVIReports.Where(h => h.MasterLotId == lot.Id).ToListAsync();
+            foreach (var h in linkedHvis)
+                h.MasterLotId = null;
+
+            Context.Lots.Remove(lot);
+        }
+
+        await Context.SaveChangesAsync();
+        selectedLotIds.Clear();
         await LoadLots();
     }
 

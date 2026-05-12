@@ -31,7 +31,7 @@ Ví dụ đúng:
 
 Bạn phải tuân thủ nghiêm ngặt quy tắc trên. Không được điền G5 vào Color Grade.
 
-Output BẮT BUỘC là JSON hợp lệ, không thêm bất kỳ text nào khác.";
+Output BẮT BUỘC là JSON compact trên 1 dòng duy nhất (KHÔNG xuống dòng, KHÔNG indent/pretty-print), không thêm bất kỳ text nào khác.";
 
     private const string JsonSchema = @"{
   ""shipper"": ""string"",
@@ -135,7 +135,7 @@ Output BẮT BUỘC là JSON hợp lệ, không thêm bất kỳ text nào khác
             var requestBody = new
             {
                 model = model,
-                max_tokens = 8192,
+                max_tokens = 16384,
                 system = SystemPrompt,
                 messages = new[]
                 {
@@ -287,7 +287,7 @@ Output BẮT BUỘC là JSON hợp lệ, không thêm bất kỳ text nào khác
         sb.AppendLine(pdfText);
         sb.AppendLine("=== HẾT NỘI DUNG ===");
         sb.AppendLine();
-        sb.AppendLine("Trả về JSON hợp lệ duy nhất, không thêm text khác.");
+        sb.AppendLine("Trả về JSON compact trên 1 dòng (không indent, không xuống dòng), không markdown, không text khác.");
 
         return sb.ToString();
     }

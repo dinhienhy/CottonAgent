@@ -115,7 +115,7 @@ Output BẮT BUỘC là JSON hợp lệ, không thêm bất kỳ text nào khác
 
         var model = GetSettingFromDb("ANTHROPIC_MODEL")
                     ?? _config["Anthropic:Model"]
-                    ?? "claude-sonnet-4-20250514";
+                    ?? "claude-sonnet-4-5-20250929";
         log.Model = model;
         log.AddStep($"Model: {model}");
 

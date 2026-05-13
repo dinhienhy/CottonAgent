@@ -206,6 +206,7 @@ public class PdfParserService : IPdfParserService
             result.OfferDate = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
 
         int autoIdx = 1;
+        var seenCodes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var lot in aiResult.Lots)
         {
             // Auto-generate LotCode if AI didn't extract one
@@ -218,10 +219,21 @@ public class PdfParserService : IPdfParserService
                 autoIdx++;
             }
 
+            // Ensure unique LotCode: append suffix if duplicate
+            if (seenCodes.ContainsKey(lotCode))
+            {
+                seenCodes[lotCode]++;
+                lotCode = $"{lotCode}-{seenCodes[lotCode]:D2}";
+            }
+            else
+            {
+                seenCodes[lotCode] = 1;
+            }
+
             var offerLot = new OfferLot
             {
                 OfferId = offerId,
-                LotCode = lotCode ?? $"AUTO-{autoIdx++}",
+                LotCode = lotCode,
                 Origin = lot.LoaiBong ?? aiResult.Shipper,
                 Quantity = lot.QuantityTan,
                 Type = lot.TypeAllBci ?? lot.LoaiBong ?? string.Empty,

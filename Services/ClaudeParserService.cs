@@ -123,21 +123,25 @@ Output BẮT BUỘC là JSON compact trên 1 dòng duy nhất (KHÔNG xuống d�
         log.HasFewShot = !string.IsNullOrEmpty(fewShotExample);
         log.AddStep(log.HasFewShot ? "Few-shot sample found" : "No few-shot sample (new shipper)");
 
-        var userMessage = BuildUserMessage(pdfText, fewShotExample);
-        log.AddStep($"Prompt built ({userMessage.Length:N0} chars). Calling Claude API...");
+        var userMessage = BuildUserMessage(pdfText);
+        log.AddStep($"Prompt built (user={userMessage.Length:N0} chars). Calling Claude API with prompt caching...");
 
         try
         {
             var client = _httpClientFactory.CreateClient("Claude");
             client.DefaultRequestHeaders.Add("x-api-key", apiKey);
             client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
+            client.DefaultRequestHeaders.Add("anthropic-beta", "prompt-caching-2024-07-31");
 
-            var requestBody = new
+            // Build system blocks with cache_control
+            var systemBlocks = BuildSystemBlocks(fewShotExample);
+
+            var requestBody = new Dictionary<string, object>
             {
-                model = model,
-                max_tokens = 16384,
-                system = SystemPrompt,
-                messages = new[]
+                ["model"] = model,
+                ["max_tokens"] = 32000,
+                ["system"] = systemBlocks,
+                ["messages"] = new[]
                 {
                     new { role = "user", content = userMessage }
                 }
@@ -170,13 +174,18 @@ Output BẮT BUỘC là JSON compact trên 1 dòng duy nhất (KHÔNG xuống d�
             {
                 log.InputTokens = usage.TryGetProperty("input_tokens", out var it) ? it.GetInt32() : null;
                 log.OutputTokens = usage.TryGetProperty("output_tokens", out var ot) ? ot.GetInt32() : null;
+                log.CacheCreationTokens = usage.TryGetProperty("cache_creation_input_tokens", out var cc) ? cc.GetInt32() : null;
+                log.CacheReadTokens = usage.TryGetProperty("cache_read_input_tokens", out var cr) ? cr.GetInt32() : null;
             }
             if (root.TryGetProperty("stop_reason", out var sr))
             {
                 log.StopReason = sr.GetString();
             }
 
-            log.AddStep($"Tokens: in={log.InputTokens}, out={log.OutputTokens}, stop={log.StopReason}");
+            var cacheInfo = log.CacheReadTokens > 0 ? $", cache_read={log.CacheReadTokens}" 
+                         : log.CacheCreationTokens > 0 ? $", cache_created={log.CacheCreationTokens}" 
+                         : "";
+            log.AddStep($"Tokens: in={log.InputTokens}, out={log.OutputTokens}, stop={log.StopReason}{cacheInfo}");
 
             if (log.StopReason == "max_tokens")
             {
@@ -268,27 +277,41 @@ Output BẮT BUỘC là JSON compact trên 1 dòng duy nhất (KHÔNG xuống d�
         return sb.ToString();
     }
 
-    private string BuildUserMessage(string pdfText, string? fewShotExample)
+    private List<Dictionary<string, object>> BuildSystemBlocks(string? fewShotExample)
     {
-        var sb = new StringBuilder();
+        var blocks = new List<Dictionary<string, object>>();
 
-        sb.AppendLine("Hãy parse Offer PDF dưới đây thành JSON theo schema sau:");
-        sb.AppendLine(JsonSchema);
-        sb.AppendLine();
+        // Block 1: System prompt + JSON schema (cached)
+        var systemText = SystemPrompt + "\n\nJSON Schema bắt buộc:\n" + JsonSchema;
+        blocks.Add(new Dictionary<string, object>
+        {
+            ["type"] = "text",
+            ["text"] = systemText,
+            ["cache_control"] = new { type = "ephemeral" }
+        });
 
+        // Block 2: Few-shot example (cached, if available)
         if (!string.IsNullOrEmpty(fewShotExample))
         {
-            sb.AppendLine("Đây là ví dụ mẫu từ shipper này (học theo format kết quả mong muốn):");
-            sb.AppendLine(fewShotExample);
-            sb.AppendLine();
+            blocks.Add(new Dictionary<string, object>
+            {
+                ["type"] = "text",
+                ["text"] = "Đây là ví dụ mẫu từ shipper này (học theo format kết quả mong muốn):\n" + fewShotExample,
+                ["cache_control"] = new { type = "ephemeral" }
+            });
         }
 
+        return blocks;
+    }
+
+    private string BuildUserMessage(string pdfText)
+    {
+        var sb = new StringBuilder();
         sb.AppendLine("=== NỘI DUNG OFFER PDF CẦN PARSE ===");
         sb.AppendLine(pdfText);
         sb.AppendLine("=== HẾT NỘI DUNG ===");
         sb.AppendLine();
         sb.AppendLine("Trả về JSON compact trên 1 dòng (không indent, không xuống dòng), không markdown, không text khác.");
-
         return sb.ToString();
     }
 

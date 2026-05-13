@@ -123,6 +123,8 @@
                 <div class="row g-2 mb-2">
                     <div class="col-auto"><span class="badge bg-dark">Model: @(aiLog.Model ?? "N/A")</span></div>
                     <div class="col-auto"><span class="badge bg-info text-dark">Tokens: @(aiLog.InputTokens?.ToString("N0") ?? "—") in / @(aiLog.OutputTokens?.ToString("N0") ?? "—") out</span></div>
+                    @if (aiLog.CacheReadTokens > 0) { <div class="col-auto"><span class="badge bg-success">Cache HIT: @aiLog.CacheReadTokens.Value.ToString("N0") tokens</span></div> }
+                    else if (aiLog.CacheCreationTokens > 0) { <div class="col-auto"><span class="badge bg-warning text-dark">Cache CREATED: @aiLog.CacheCreationTokens.Value.ToString("N0") tokens</span></div> }
                     <div class="col-auto"><span class="badge @(aiLog.StopReason == "max_tokens" ? "bg-warning text-dark" : "bg-secondary")">Stop: @(aiLog.StopReason ?? "—")</span></div>
                     <div class="col-auto"><span class="badge bg-primary">@(aiLog.ElapsedSeconds.ToString("F1"))s</span></div>
                     @if (aiLog.HasFewShot) { <div class="col-auto"><span class="badge bg-success">Few-Shot</span></div> }

@@ -8,6 +8,8 @@ public class ClaudeParseLog
     public string? ErrorMessage { get; set; }
     public int? InputTokens { get; set; }
     public int? OutputTokens { get; set; }
+    public int? CacheCreationTokens { get; set; }
+    public int? CacheReadTokens { get; set; }
     public string? StopReason { get; set; }
     public string? RawResponse { get; set; }
     public int? LotsFound { get; set; }

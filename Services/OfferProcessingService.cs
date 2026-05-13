@@ -312,6 +312,7 @@ public class OfferProcessingService : IOfferProcessingService
         if (!shipperId.HasValue) return;
 
         int total = offer.OfferLots.Count;
+        int uniqueCodes = offer.OfferLots.Where(ol => !string.IsNullOrEmpty(ol.LotCode)).Select(ol => ol.LotCode).Distinct().Count();
         int skipped = 0, created = 0, updated = 0, errors = 0;
 
         foreach (var offerLot in offer.OfferLots)
@@ -422,7 +423,7 @@ public class OfferProcessingService : IOfferProcessingService
 
         await _context.SaveChangesAsync();
         var totalLotsInDb = await _context.Lots.CountAsync();
-        LastSyncLog = $"Tổng OfferLots: {total} | Tạo mới: {created} | Cập nhật: {updated} | Bỏ qua (không có mã): {skipped} | Lỗi: {errors} | TỔNG LOT TRONG DB: {totalLotsInDb}";
+        LastSyncLog = $"Tổng OfferLots: {total} | Mã lot unique: {uniqueCodes} | Tạo mới: {created} | Cập nhật: {updated} | Bỏ qua (không mã): {skipped} | Lỗi: {errors} | TỔNG LOT DB: {totalLotsInDb}";
         Console.WriteLine($"[SyncLots] Offer {offerId}: total={total}, created={created}, updated={updated}, skipped(no code)={skipped}, errors={errors}, totalLotsInDb={totalLotsInDb}");
     }
 

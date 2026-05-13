@@ -132,7 +132,9 @@ public class OfferProcessingService : IOfferProcessingService
                 }
                 
                 await _context.SaveChangesAsync();
-                Console.WriteLine("Lots saved");
+                var withCode = parseResult.Lots.Count(l => !string.IsNullOrEmpty(l.LotCode));
+                var noCode = parseResult.Lots.Count - withCode;
+                Console.WriteLine($"[ProcessOffer] Saved {parseResult.Lots.Count} OfferLots (withCode={withCode}, noCode={noCode})");
 
                 // Store AI log for UI
                 LastAILog = parseResult.AILog;
@@ -152,7 +154,7 @@ public class OfferProcessingService : IOfferProcessingService
     {
         // Get all lots with LotCode for this offer
         var lotsWithCode = await _context.OfferLots
-            .Where(l => l.OfferId == offerId && l.LotCode != null)
+            .Where(l => l.OfferId == offerId && l.LotCode != null && l.LotCode != "")
             .Select(l => l.LotCode!)
             .Distinct()
             .ToListAsync();
@@ -308,91 +310,117 @@ public class OfferProcessingService : IOfferProcessingService
         var shipperId = offer.ShipperId;
         if (!shipperId.HasValue) return;
 
+        int total = offer.OfferLots.Count;
+        int skipped = 0, created = 0, updated = 0, errors = 0;
+
         foreach (var offerLot in offer.OfferLots)
         {
-            if (string.IsNullOrEmpty(offerLot.LotCode)) continue;
-
-            var lot = await _context.Lots.FirstOrDefaultAsync(l => l.LotCode == offerLot.LotCode);
-
-            if (lot == null)
+            if (string.IsNullOrEmpty(offerLot.LotCode))
             {
-                lot = new Lot
+                skipped++;
+                continue;
+            }
+
+            try
+            {
+                var lot = await _context.Lots.FirstOrDefaultAsync(l => l.LotCode == offerLot.LotCode);
+
+                if (lot == null)
                 {
-                    LotCode = offerLot.LotCode,
-                    ShipperId = shipperId.Value,
-                    Origin = offerLot.Origin,
-                    CropYear = offerLot.CropYear,
-                    Type = offerLot.Type,
-                    QuantityOriginal = offerLot.Quantity,
-                    QuantityAvailable = offerLot.Quantity,
-                    BasisCents = offerLot.BasisCents,
-                    OutrightPrice = offerLot.OutrightPrice,
-                    ShipmentDate = offerLot.ShipmentDate,
-                    ShipmentDateText = offerLot.ShipmentDateText,
-                    SpecialSpec = offerLot.SpecialSpec,
-                    Status = LotStatus.Available,
-                    LatestOfferId = offerId,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-                _context.Lots.Add(lot);
+                    lot = new Lot
+                    {
+                        LotCode = offerLot.LotCode,
+                        ShipperId = shipperId.Value,
+                        Origin = offerLot.Origin,
+                        CropYear = offerLot.CropYear,
+                        Type = offerLot.Type,
+                        QuantityOriginal = offerLot.Quantity,
+                        QuantityAvailable = offerLot.Quantity,
+                        BasisCents = offerLot.BasisCents,
+                        OutrightPrice = offerLot.OutrightPrice,
+                        ShipmentDate = offerLot.ShipmentDate,
+                        ShipmentDateText = offerLot.ShipmentDateText,
+                        SpecialSpec = offerLot.SpecialSpec,
+                        Status = LotStatus.Available,
+                        LatestOfferId = offerId,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    _context.Lots.Add(lot);
+                    await _context.SaveChangesAsync();
+                    created++;
+                }
+                else
+                {
+                    lot.QuantityAvailable = offerLot.Quantity;
+                    lot.BasisCents = offerLot.BasisCents;
+                    lot.OutrightPrice = offerLot.OutrightPrice;
+                    lot.ShipmentDate = offerLot.ShipmentDate;
+                    lot.ShipmentDateText = offerLot.ShipmentDateText;
+                    lot.SpecialSpec = offerLot.SpecialSpec;
+                    lot.LatestOfferId = offerId;
+                    lot.UpdatedAt = DateTime.UtcNow;
+                    if (!string.IsNullOrEmpty(offerLot.Origin)) lot.Origin = offerLot.Origin;
+                    if (!string.IsNullOrEmpty(offerLot.CropYear)) lot.CropYear = offerLot.CropYear;
+                    updated++;
+                }
+
+                offerLot.MasterLotId = lot.Id;
+
+                // Auto-create/update HVIReport from parsed spec data (Olam/Brighann)
+                var hvi = await _context.HVIReports.FirstOrDefaultAsync(h => h.LotCode == offerLot.LotCode);
+                if (hvi == null)
+                {
+                    hvi = new HVIReport
+                    {
+                        LotCode = offerLot.LotCode,
+                        FileName = $"parsed-{offerLot.LotCode}",
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.HVIReports.Add(hvi);
+                }
+
+                // Fill HVI from parsed spec if not already set
+                if (!hvi.Micronaire.HasValue && !string.IsNullOrEmpty(offerLot.MicronaireSpec))
+                {
+                    if (decimal.TryParse(offerLot.MicronaireSpec, NumberStyles.Any, CultureInfo.InvariantCulture, out var mic))
+                        hvi.Micronaire = mic;
+                }
+                if (!hvi.Length.HasValue && !string.IsNullOrEmpty(offerLot.LengthSpec))
+                {
+                    if (decimal.TryParse(offerLot.LengthSpec, NumberStyles.Any, CultureInfo.InvariantCulture, out var len))
+                        hvi.Length = len;
+                }
+                if (!hvi.StrengthGPT.HasValue && !string.IsNullOrEmpty(offerLot.StrengthSpec))
+                {
+                    if (decimal.TryParse(offerLot.StrengthSpec, NumberStyles.Any, CultureInfo.InvariantCulture, out var str))
+                        hvi.StrengthGPT = str;
+                }
+                if (!string.IsNullOrEmpty(offerLot.CropYear))
+                    hvi.CropYear = offerLot.CropYear;
+
                 await _context.SaveChangesAsync();
+                hvi.MasterLotId = lot.Id;
+                lot.HVIReportId = hvi.HVIId;
             }
-            else
+            catch (Exception ex)
             {
-                lot.QuantityAvailable = offerLot.Quantity;
-                lot.BasisCents = offerLot.BasisCents;
-                lot.OutrightPrice = offerLot.OutrightPrice;
-                lot.ShipmentDate = offerLot.ShipmentDate;
-                lot.ShipmentDateText = offerLot.ShipmentDateText;
-                lot.SpecialSpec = offerLot.SpecialSpec;
-                lot.LatestOfferId = offerId;
-                lot.UpdatedAt = DateTime.UtcNow;
-                if (!string.IsNullOrEmpty(offerLot.Origin)) lot.Origin = offerLot.Origin;
-                if (!string.IsNullOrEmpty(offerLot.CropYear)) lot.CropYear = offerLot.CropYear;
-            }
-
-            offerLot.MasterLotId = lot.Id;
-
-            // Auto-create/update HVIReport from parsed spec data (Olam/Brighann)
-            var hvi = await _context.HVIReports.FirstOrDefaultAsync(h => h.LotCode == offerLot.LotCode);
-            if (hvi == null)
-            {
-                hvi = new HVIReport
+                errors++;
+                Console.Error.WriteLine($"[SyncLots] Error syncing lot '{offerLot.LotCode}': {ex.InnerException?.Message ?? ex.Message}");
+                // Detach failed entities to prevent cascading errors
+                foreach (var entry in _context.ChangeTracker.Entries()
+                    .Where(e => e.State == EntityState.Added || e.State == EntityState.Modified))
                 {
-                    LotCode = offerLot.LotCode,
-                    FileName = $"parsed-{offerLot.LotCode}",
-                    CreatedAt = DateTime.UtcNow
-                };
-                _context.HVIReports.Add(hvi);
+                    if (entry.State == EntityState.Added)
+                        entry.State = EntityState.Detached;
+                    else
+                        await entry.ReloadAsync();
+                }
             }
-
-            // Fill HVI from parsed spec if not already set
-            if (!hvi.Micronaire.HasValue && !string.IsNullOrEmpty(offerLot.MicronaireSpec))
-            {
-                if (decimal.TryParse(offerLot.MicronaireSpec, NumberStyles.Any, CultureInfo.InvariantCulture, out var mic))
-                    hvi.Micronaire = mic;
-            }
-            if (!hvi.Length.HasValue && !string.IsNullOrEmpty(offerLot.LengthSpec))
-            {
-                if (decimal.TryParse(offerLot.LengthSpec, NumberStyles.Any, CultureInfo.InvariantCulture, out var len))
-                    hvi.Length = len;
-            }
-            if (!hvi.StrengthGPT.HasValue && !string.IsNullOrEmpty(offerLot.StrengthSpec))
-            {
-                if (decimal.TryParse(offerLot.StrengthSpec, NumberStyles.Any, CultureInfo.InvariantCulture, out var str))
-                    hvi.StrengthGPT = str;
-            }
-            if (!string.IsNullOrEmpty(offerLot.CropYear))
-                hvi.CropYear = offerLot.CropYear;
-
-            await _context.SaveChangesAsync();
-            hvi.MasterLotId = lot.Id;
-            lot.HVIReportId = hvi.HVIId;
         }
 
         await _context.SaveChangesAsync();
-        Console.WriteLine($"Synced lots for offer {offerId}");
+        Console.WriteLine($"[SyncLots] Offer {offerId}: total={total}, created={created}, updated={updated}, skipped(no code)={skipped}, errors={errors}");
     }
 
     public async Task<List<OutputGroupDto>> GetProcessedOutputAsync(int offerId)

@@ -95,7 +95,10 @@ static string GetConnectionString(IConfiguration configuration)
         ?? "Host=localhost;Database=cbas_db;Username=postgres;Password=postgres";
 }
 
-builder.Services.AddHttpClient("Claude");
+builder.Services.AddHttpClient("Claude", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(300);
+});
 builder.Services.AddSingleton<IOcrService, TesseractOcrService>();
 builder.Services.AddScoped<IClaudeParserService, ClaudeParserService>();
 builder.Services.AddScoped<IPdfParserService, PdfParserService>();

@@ -6,6 +6,7 @@ namespace CBAS.Web.Services;
 public interface IOfferProcessingService
 {
     ClaudeParseLog? LastAILog { get; }
+    string? LastSyncLog { get; }
     Task<int> ProcessOfferAsync(OfferUploadDto uploadDto);
     Task<List<HVIInputDto>> GetHVIForReviewAsync(int offerId);
     Task<HVIInputDto> RunOcrForLotAsync(string lotCode, Stream pdfStream, string fileName);

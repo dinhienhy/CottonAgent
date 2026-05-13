@@ -16,6 +16,7 @@ public class OfferProcessingService : IOfferProcessingService
     private const decimal LB_TO_KG = 2.20462m;
 
     public ClaudeParseLog? LastAILog { get; private set; }
+    public string? LastSyncLog { get; private set; }
 
     public OfferProcessingService(
         ApplicationDbContext context,
@@ -420,6 +421,7 @@ public class OfferProcessingService : IOfferProcessingService
         }
 
         await _context.SaveChangesAsync();
+        LastSyncLog = $"Tổng OfferLots: {total} | Tạo mới: {created} | Cập nhật: {updated} | Bỏ qua (không có mã): {skipped} | Lỗi: {errors}";
         Console.WriteLine($"[SyncLots] Offer {offerId}: total={total}, created={created}, updated={updated}, skipped(no code)={skipped}, errors={errors}");
     }
 

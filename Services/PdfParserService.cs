@@ -210,9 +210,10 @@ public class PdfParserService : IPdfParserService
             var offerLot = new OfferLot
             {
                 OfferId = offerId,
-                Origin = aiResult.Shipper,
+                LotCode = lot.KieuBong,
+                Origin = lot.LoaiBong ?? aiResult.Shipper,
                 Quantity = lot.QuantityTan,
-                Type = lot.LoaiBong ?? lot.TypeAllBci ?? string.Empty,
+                Type = lot.TypeAllBci ?? lot.LoaiBong ?? string.Empty,
                 SpecialSpec = BuildSpecialSpec(lot),
                 ColorSpec = lot.MauSacColorGrade,
                 LeafSpec = lot.TapLeaf,

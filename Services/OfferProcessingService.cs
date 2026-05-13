@@ -421,8 +421,9 @@ public class OfferProcessingService : IOfferProcessingService
         }
 
         await _context.SaveChangesAsync();
-        LastSyncLog = $"Tổng OfferLots: {total} | Tạo mới: {created} | Cập nhật: {updated} | Bỏ qua (không có mã): {skipped} | Lỗi: {errors}";
-        Console.WriteLine($"[SyncLots] Offer {offerId}: total={total}, created={created}, updated={updated}, skipped(no code)={skipped}, errors={errors}");
+        var totalLotsInDb = await _context.Lots.CountAsync();
+        LastSyncLog = $"Tổng OfferLots: {total} | Tạo mới: {created} | Cập nhật: {updated} | Bỏ qua (không có mã): {skipped} | Lỗi: {errors} | TỔNG LOT TRONG DB: {totalLotsInDb}";
+        Console.WriteLine($"[SyncLots] Offer {offerId}: total={total}, created={created}, updated={updated}, skipped(no code)={skipped}, errors={errors}, totalLotsInDb={totalLotsInDb}");
     }
 
     public async Task<List<OutputGroupDto>> GetProcessedOutputAsync(int offerId)

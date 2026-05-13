@@ -205,12 +205,23 @@ public class PdfParserService : IPdfParserService
             DateTime.TryParse(aiResult.OfferDate, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
             result.OfferDate = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
 
+        int autoIdx = 1;
         foreach (var lot in aiResult.Lots)
         {
+            // Auto-generate LotCode if AI didn't extract one
+            var lotCode = lot.KieuBong;
+            if (string.IsNullOrWhiteSpace(lotCode))
+            {
+                var prefix = (lot.LoaiBong ?? aiResult.Shipper ?? "LOT").Replace(" ", "");
+                if (prefix.Length > 8) prefix = prefix[..8];
+                lotCode = $"{prefix}-{autoIdx:D3}";
+                autoIdx++;
+            }
+
             var offerLot = new OfferLot
             {
                 OfferId = offerId,
-                LotCode = lot.KieuBong,
+                LotCode = lotCode ?? $"AUTO-{autoIdx++}",
                 Origin = lot.LoaiBong ?? aiResult.Shipper,
                 Quantity = lot.QuantityTan,
                 Type = lot.TypeAllBci ?? lot.LoaiBong ?? string.Empty,

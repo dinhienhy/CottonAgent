@@ -2,6 +2,41 @@
 
 All notable changes to the Cotton Broker Automation System (CBAS) will be documented in this file.
 
+## [2.1.0] - 2026-05-13
+
+### Fixed — Lot Data Persistence & Prompt Caching
+
+#### Prompt Caching (Claude API)
+- **`anthropic-beta: prompt-caching-2024-07-31`** header — giảm chi phí & tăng tốc parse
+- System prompt + few-shot example dùng `cache_control: ephemeral` blocks
+- `max_tokens` tăng lên 32000 để tránh JSON bị truncate
+- `ClaudeParseLog` DTO — thêm `CacheCreationTokens`, `CacheReadTokens`
+- UI hiện badge **Cache HIT** / **Cache CREATED** trong AI Log panel
+
+#### HttpClient Timeout
+- Tăng timeout Claude API từ 100s → **300s** (`Program.cs`) — tránh cancel khi parse offer lớn
+
+#### Fix: LotCode & Origin mapping
+- `PdfParserService.ConvertAIResult` — sửa `LotCode = lot.KieuBong` (trước đó null) và `Origin = lot.LoaiBong` (trước đó luôn = shipper name)
+
+#### Fix: Lot Data Persistence (SyncLotsAsync)
+- **Per-lot try-catch** — 1 lot lỗi không abort toàn bộ vòng lặp
+- **ChangeTracker cleanup** — detach Added / reload Modified entities khi lỗi
+- **Diagnostic counters** — total, created, updated, skipped, errors, unique codes, total DB count
+- **Sync DB log hiện trên UI** (Step 3) — hiện rõ kết quả sync
+
+#### Fix: Unique LotCode per OfferLot
+- Auto-generate LotCode cho lots mà AI không trích xuất được `kieu_bong` (format: `{Origin}-001`)
+- **Deduplicate suffix** — nếu cùng LotCode xuất hiện nhiều lần trong offer, thêm suffix `-02`, `-03`...
+- Mỗi dòng offer = 1 lot riêng biệt trong DB (trước đó trùng LotCode → merge mất data)
+
+#### UI Improvements
+- **LotList**: badge `xx lots` hiện tổng số lot cạnh tiêu đề
+- **LotList**: nút "Xóa (n)" — xóa nhiều lots đã chọn cùng lúc
+- **Settings**: sửa model dropdown dùng đúng Anthropic model IDs
+
+---
+
 ## [2.0.0] - 2026-05-07
 
 ### Added - AI Universal Offer Parser (Claude API + Few-Shot Learning)

@@ -358,7 +358,14 @@
     {
         shipperList = await Context.Shippers.Where(s => s.IsActive).OrderBy(s => s.Name).ToListAsync();
         originList = await Context.Lots.Select(l => l.Origin).Distinct().OrderBy(o => o).ToListAsync();
-        offerList = await Context.Offers.OrderByDescending(o => o.CreatedAt).Take(30).ToListAsync();
+        try
+        {
+            offerList = await Context.Offers
+                .OrderByDescending(o => o.CreatedAt)
+                .Take(30)
+                .ToListAsync();
+        }
+        catch { offerList = new(); }
         await LoadLots();
     }
 
@@ -502,13 +509,22 @@
             return;
         }
 
-        var offer = await Context.Offers.FindAsync(selectedOfferId);
-        comparisonPdfText = offer?.RawPdfText;
-        comparisonOfferLots = await Context.OfferLots
-            .Where(ol => ol.OfferId == selectedOfferId)
-            .OrderBy(ol => ol.LotId)
-            .ToListAsync();
-        showOfferComparison = true;
+        try
+        {
+            var offer = await Context.Offers.FindAsync(selectedOfferId);
+            comparisonPdfText = offer?.RawPdfText;
+            comparisonOfferLots = await Context.OfferLots
+                .Where(ol => ol.OfferId == selectedOfferId)
+                .OrderBy(ol => ol.LotId)
+                .ToListAsync();
+            showOfferComparison = true;
+        }
+        catch
+        {
+            comparisonPdfText = "Lỗi tải dữ liệu offer";
+            comparisonOfferLots = new();
+            showOfferComparison = true;
+        }
     }
 
     private async Task HighlightOfferLot(OfferLot lot)

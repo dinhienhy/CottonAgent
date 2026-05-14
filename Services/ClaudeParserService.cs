@@ -45,7 +45,8 @@ Ví dụ đúng:
 
 Bạn phải tuân thủ nghiêm ngặt. Không được nhầm Mexico thành Mỹ, không được bỏ sót Crop Year, Basis, Staple.
 
-Output BẮT BUỘC là JSON hợp lệ, không thêm bất kỳ text nào khác.";
+Output BẮT BUỘC là JSON hợp lệ, không thêm bất kỳ text nào khác.
+Bạn PHẢI trả về kết quả chính xác và nhất quán. Với cùng một file Offer, output JSON phải giống hệt nhau mỗi lần gọi. Không được bỏ sót lot nào, không được tự suy diễn thêm lot không có trong text.";
 
     private const string JsonSchema = @"{
   ""shipper"": ""string"",
@@ -139,7 +140,7 @@ Output BẮT BUỘC là JSON hợp lệ, không thêm bất kỳ text nào khác
         log.AddStep(log.HasFewShot ? "Few-shot sample found" : "No few-shot sample (new shipper)");
 
         var userMessage = BuildUserMessage(pdfText);
-        log.AddStep($"Prompt built (user={userMessage.Length:N0} chars). Calling Claude API with prompt caching...");
+        log.AddStep($"Prompt built (user={userMessage.Length:N0} chars). Calling Claude API (temperature=0, prompt caching)...");
 
         try
         {
@@ -155,6 +156,7 @@ Output BẮT BUỘC là JSON hợp lệ, không thêm bất kỳ text nào khác
             {
                 ["model"] = model,
                 ["max_tokens"] = 32000,
+                ["temperature"] = 0,
                 ["system"] = systemBlocks,
                 ["messages"] = new[]
                 {

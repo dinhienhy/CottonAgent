@@ -53,16 +53,17 @@
                         <th class="text-center">Commission</th>
                         <th class="text-center">Số Lots</th>
                         <th>Tạo lúc</th>
+                        <th class="text-center">Thao tác</th>
                     </tr>
                 </thead>
                 <tbody>
                     @if (offers == null)
                     {
-                        <tr><td colspan="8" class="text-center py-3">Đang tải...</td></tr>
+                        <tr><td colspan="9" class="text-center py-3">Đang tải...</td></tr>
                     }
                     else if (!offers.Any())
                     {
-                        <tr><td colspan="8" class="text-center py-3 text-muted">Không có offer nào</td></tr>
+                        <tr><td colspan="9" class="text-center py-3 text-muted">Không có offer nào</td></tr>
                     }
                     else
                     {
@@ -79,6 +80,21 @@
                                     <span class="badge bg-info">@o.OfferLots.Count lots</span>
                                 </td>
                                 <td><small>@o.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</small></td>
+                                <td class="text-center">
+                                    @if (confirmDeleteId == o.OfferId)
+                                    {
+                                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteOffer(o.OfferId)" disabled="@isDeleting">
+                                            @(isDeleting ? "Đang xoá..." : "Chắc chắn?")
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-secondary ms-1" @onclick="() => confirmDeleteId = 0">Huỷ</button>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => confirmDeleteId = o.OfferId" title="Xoá offer này">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    }
+                                </td>
                             </tr>
                         }
                     }
@@ -94,6 +110,8 @@
     private string filterShipper = "";
     private DateTime? filterDateFrom;
     private DateTime? filterDateTo;
+    private int confirmDeleteId;
+    private bool isDeleting;
 
     protected override async Task OnInitializedAsync()
     {
@@ -134,5 +152,40 @@
         filterDateFrom = null;
         filterDateTo = null;
         await LoadOffers();
+    }
+
+    private async Task DeleteOffer(int offerId)
+    {
+        isDeleting = true;
+        try
+        {
+            // Nullify Lot.LatestOfferId references
+            var linkedLots = await Context.Lots.Where(l => l.LatestOfferId == offerId).ToListAsync();
+            foreach (var lot in linkedLots) lot.LatestOfferId = null;
+
+            // Remove ProcessedOutputs
+            var outputs = await Context.ProcessedOutputs.Where(p => p.OfferId == offerId).ToListAsync();
+            Context.ProcessedOutputs.RemoveRange(outputs);
+
+            // Remove OfferLots
+            var offerLots = await Context.OfferLots.Where(ol => ol.OfferId == offerId).ToListAsync();
+            Context.OfferLots.RemoveRange(offerLots);
+
+            // Remove Offer
+            var offer = await Context.Offers.FindAsync(offerId);
+            if (offer != null) Context.Offers.Remove(offer);
+
+            await Context.SaveChangesAsync();
+            confirmDeleteId = 0;
+            await LoadOffers();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error deleting offer {offerId}: {ex.Message}");
+        }
+        finally
+        {
+            isDeleting = false;
+        }
     }
 }

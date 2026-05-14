@@ -37,6 +37,36 @@
             link.click();
             document.body.removeChild(link);
         };
+
+        window.highlightPdfText = function (searchTermsJson) {
+            const panel = document.getElementById('pdfTextPanel');
+            if (!panel) return;
+            const terms = JSON.parse(searchTermsJson).filter(t => t && t.length > 1);
+            if (terms.length === 0) return;
+
+            // Reset any previous highlights
+            const original = panel.getAttribute('data-original') || panel.textContent;
+            panel.setAttribute('data-original', original);
+
+            // Find lines containing ANY search term
+            const lines = original.split('\n');
+            let firstMatchIdx = -1;
+            const highlighted = lines.map((line, idx) => {
+                const lower = line.toLowerCase();
+                const match = terms.some(t => lower.includes(t.toLowerCase()));
+                if (match && firstMatchIdx < 0) firstMatchIdx = idx;
+                return match ? '<mark style="background:#ffe066;display:block;padding:1px 2px;">' + line.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</mark>'
+                             : line.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            }).join('\n');
+
+            panel.innerHTML = highlighted;
+
+            // Scroll to first match
+            const firstMark = panel.querySelector('mark');
+            if (firstMark) {
+                firstMark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        };
     </script>
 </body>
 </html>

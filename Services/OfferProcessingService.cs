@@ -17,6 +17,7 @@ public class OfferProcessingService : IOfferProcessingService
 
     public ClaudeParseLog? LastAILog { get; private set; }
     public string? LastSyncLog { get; private set; }
+    public string? LastRawPdfText { get; private set; }
 
     public OfferProcessingService(
         ApplicationDbContext context,
@@ -137,8 +138,9 @@ public class OfferProcessingService : IOfferProcessingService
                 var noCode = parseResult.Lots.Count - withCode;
                 Console.WriteLine($"[ProcessOffer] Saved {parseResult.Lots.Count} OfferLots (withCode={withCode}, noCode={noCode})");
 
-                // Store AI log for UI
+                // Store AI log + raw text for UI
                 LastAILog = parseResult.AILog;
+                LastRawPdfText = parseResult.RawText;
             }
             catch (Exception ex)
             {
@@ -149,6 +151,14 @@ public class OfferProcessingService : IOfferProcessingService
 
         // Don't generate outputs yet - wait for HVI review step
         return offer.OfferId;
+    }
+
+    public async Task<List<OfferLot>> GetOfferLotsAsync(int offerId)
+    {
+        return await _context.OfferLots
+            .Where(l => l.OfferId == offerId)
+            .OrderBy(l => l.LotId)
+            .ToListAsync();
     }
 
     public async Task<List<HVIInputDto>> GetHVIForReviewAsync(int offerId)

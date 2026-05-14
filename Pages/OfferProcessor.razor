@@ -161,6 +161,94 @@
         </div>
     }
 
+    @* ══════════════════════ SIDE-BY-SIDE COMPARISON ══════════════════════ *@
+    @if ((currentStep == 2 || currentStep == 3) && parsedOfferLots?.Any() == true)
+    {
+        <div class="card mb-3">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center py-2">
+                <h6 class="mb-0">
+                    <i class="bi bi-layout-split me-1"></i>
+                    Đối chiếu PDF gốc ↔ Dữ liệu đã parse (@parsedOfferLots.Count lots)
+                </h6>
+                <button class="btn btn-sm btn-outline-light" @onclick="() => showComparison = !showComparison">
+                    @(showComparison ? "Thu gọn ▲" : "Mở xem ▼")
+                </button>
+            </div>
+            @if (showComparison)
+            {
+                <div class="card-body p-2" style="font-size:0.78rem;">
+                    <div class="row g-2">
+                        @* LEFT: Raw PDF Text *@
+                        <div class="col-md-4">
+                            <div class="border rounded p-2 bg-light" style="height:500px; overflow-y:auto;">
+                                <h6 class="fw-bold text-muted mb-2">📄 PDF Text gốc</h6>
+                                <pre id="pdfTextPanel" style="white-space:pre-wrap; font-size:0.72rem; font-family:monospace; line-height:1.5; margin:0;">@(rawPdfText ?? "Không có dữ liệu PDF text")</pre>
+                            </div>
+                        </div>
+                        @* RIGHT: Parsed Lots Table *@
+                        <div class="col-md-8">
+                            <div class="border rounded" style="height:500px; overflow:auto;">
+                                <table class="table table-bordered table-hover table-sm mb-0" style="font-size:0.72rem;">
+                                    <thead class="table-dark sticky-top">
+                                        <tr>
+                                            <th style="width:30px">#</th>
+                                            <th>LotCode</th>
+                                            <th>Origin</th>
+                                            <th>CropYear</th>
+                                            <th>QTY</th>
+                                            <th>Type</th>
+                                            <th>Color</th>
+                                            <th>Leaf</th>
+                                            <th>Staple</th>
+                                            <th>Mic</th>
+                                            <th>Str</th>
+                                            <th>Basis</th>
+                                            <th>Fixed</th>
+                                            <th>Settle</th>
+                                            <th>Shipment</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @{ int rowNum = 0; }
+                                        @foreach (var lot in parsedOfferLots)
+                                        {
+                                            rowNum++;
+                                            var basisDisplay = lot.BasisCents != 0 ? (lot.BasisCents * 100).ToString("N0") : "";
+                                            var fixedDisplay = lot.OutrightPrice != 0 ? lot.OutrightPrice.ToString("N2") : "";
+                                            <tr class="@(highlightedLotId == lot.LotId ? "table-warning" : "")"
+                                                @onclick="() => HighlightLot(lot)"
+                                                style="cursor:pointer;" title="Click để tìm trong PDF text">
+                                                <td class="text-muted">@rowNum</td>
+                                                <td class="fw-bold text-nowrap">@lot.LotCode</td>
+                                                <td>@lot.Origin</td>
+                                                <td>@lot.CropYear</td>
+                                                <td class="text-end">@(lot.Quantity > 0 ? lot.Quantity.ToString("N0") : "—")</td>
+                                                <td>@lot.Type</td>
+                                                <td>@lot.ColorSpec</td>
+                                                <td>@lot.LeafSpec</td>
+                                                <td>@lot.LengthSpec</td>
+                                                <td>@lot.MicronaireSpec</td>
+                                                <td>@lot.StrengthSpec</td>
+                                                <td class="text-end">@basisDisplay</td>
+                                                <td class="text-end">@fixedDisplay</td>
+                                                <td>@lot.SettlementMonth</td>
+                                                <td>@lot.ShipmentDateText</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-1 text-muted small">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Click vào dòng lot để tìm và highlight text tương ứng trong PDF gốc.
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
     @* ══════════════════════ STEP 2: HVI REVIEW ══════════════════════ *@
     @if (currentStep == 2)
     {
@@ -499,6 +587,10 @@
     private ClaudeParseLog? aiLog;
     private bool showAiLogDetail = false;
     private string? syncLog;
+    private string? rawPdfText;
+    private List<OfferLot>? parsedOfferLots;
+    private bool showComparison = false;
+    private int? highlightedLotId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -646,6 +738,10 @@
 
             hviInputs = await OfferService.GetHVIForReviewAsync(currentOfferId);
 
+            // Load data for side-by-side comparison
+            rawPdfText = OfferService.LastRawPdfText;
+            parsedOfferLots = await OfferService.GetOfferLotsAsync(currentOfferId);
+
             // Auto-expand all lots
             expandedLots = new HashSet<string>(hviInputs.Select(h => h.LotCode));
 
@@ -755,6 +851,23 @@
         StateHasChanged();
     }
 
+    // ── Side-by-side: Highlight lot in PDF text ──
+    private async Task HighlightLot(OfferLot lot)
+    {
+        highlightedLotId = lot.LotId;
+        // Build search terms from lot data — try LotCode first, then quantity + basis
+        var searchTerms = new List<string>();
+        if (!string.IsNullOrEmpty(lot.LotCode) && !lot.LotCode.Contains("-0") && lot.LotCode.Length > 3)
+            searchTerms.Add(lot.LotCode.Split('-')[0]); // base code without suffix
+        if (lot.Quantity > 0) searchTerms.Add(((int)lot.Quantity).ToString());
+        if (lot.OutrightPrice > 0) searchTerms.Add(lot.OutrightPrice.ToString("N2"));
+        if (lot.BasisCents != 0) searchTerms.Add(((int)(lot.BasisCents * 100)).ToString());
+
+        var searchJson = System.Text.Json.JsonSerializer.Serialize(searchTerms);
+        await JSRuntime.InvokeVoidAsync("highlightPdfText", searchJson);
+        StateHasChanged();
+    }
+
     // ── Step 2: HVI Review helpers ──
     private void ToggleLotExpand(string lotCode)
     {
@@ -846,6 +959,10 @@
         showRawText.Clear();
         outputGroups = null;
         errorMessage = null;
+        rawPdfText = null;
+        parsedOfferLots = null;
+        showComparison = false;
+        highlightedLotId = null;
     }
 
     // ── Save Shipper Sample for AI Few-Shot ──

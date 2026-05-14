@@ -7,7 +7,9 @@ public interface IOfferProcessingService
 {
     ClaudeParseLog? LastAILog { get; }
     string? LastSyncLog { get; }
+    string? LastRawPdfText { get; }
     Task<int> ProcessOfferAsync(OfferUploadDto uploadDto);
+    Task<List<Models.OfferLot>> GetOfferLotsAsync(int offerId);
     Task<List<HVIInputDto>> GetHVIForReviewAsync(int offerId);
     Task<HVIInputDto> RunOcrForLotAsync(string lotCode, Stream pdfStream, string fileName);
     Task SaveHVIDataAsync(List<HVIInputDto> hviInputs);

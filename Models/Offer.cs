@@ -32,6 +32,8 @@ public class Offer
 
     public string? ICESettlementsJson { get; set; }
 
+    public string? RawPdfText { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public virtual ICollection<OfferLot> OfferLots { get; set; } = new List<OfferLot>();

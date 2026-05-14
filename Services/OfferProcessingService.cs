@@ -141,6 +141,10 @@ public class OfferProcessingService : IOfferProcessingService
                 // Store AI log + raw text for UI
                 LastAILog = parseResult.AILog;
                 LastRawPdfText = parseResult.RawText;
+
+                // Persist raw text on Offer for later comparison in LotList
+                offer.RawPdfText = parseResult.RawText;
+                await _context.SaveChangesAsync();
             }
             catch (Exception ex)
             {

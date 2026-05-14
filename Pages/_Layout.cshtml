@@ -38,8 +38,12 @@
             document.body.removeChild(link);
         };
 
-        window.highlightPdfText = function (searchTermsJson) {
-            const panel = document.getElementById('pdfTextPanel');
+        window.highlightPdfTextInPanel = function (panelId, searchTermsJson) {
+            window.highlightPdfText(searchTermsJson, panelId);
+        };
+
+        window.highlightPdfText = function (searchTermsJson, panelId) {
+            const panel = document.getElementById(panelId || 'pdfTextPanel');
             if (!panel) return;
             const terms = JSON.parse(searchTermsJson).filter(t => t && t.length > 1);
             if (terms.length === 0) return;

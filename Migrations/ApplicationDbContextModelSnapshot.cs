@@ -100,6 +100,7 @@ namespace CBAS.Web.Migrations
                     b.Property<decimal>("ICEValue").HasColumnType("decimal(10,2)");
                     b.Property<string>("ICESettlementsJson").HasColumnType("text");
                     b.Property<DateTime>("OfferDate").HasColumnType("timestamp with time zone");
+                    b.Property<string>("RawPdfText").HasColumnType("text");
                     b.Property<int?>("ShipperId").HasColumnType("integer");
                     b.Property<string>("SupplierName").IsRequired().HasMaxLength(200).HasColumnType("character varying(200)");
                     b.HasKey("OfferId");

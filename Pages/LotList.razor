@@ -80,6 +80,95 @@
         </div>
     }
 
+    @* ── Side-by-side Comparison Panel ── *@
+    <div class="card mb-2">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center py-1">
+            <h6 class="mb-0"><i class="bi bi-layout-split me-1"></i>Đối chiếu Offer gốc</h6>
+            <div class="d-flex align-items-center gap-2">
+                <select class="form-select form-select-sm bg-dark text-white border-secondary" style="width:280px;font-size:0.75rem;" @bind="selectedOfferId" @bind:after="LoadOfferComparison">
+                    <option value="0">-- Chọn Offer để đối chiếu --</option>
+                    @foreach (var o in offerList)
+                    {
+                        <option value="@o.OfferId">@o.OfferDate.ToString("dd/MM/yy") — @o.SupplierName (@o.FileName)</option>
+                    }
+                </select>
+                <button class="btn btn-sm btn-outline-light" @onclick="() => showOfferComparison = !showOfferComparison" disabled="@(selectedOfferId == 0)">
+                    @(showOfferComparison ? "Thu gọn ▲" : "Mở xem ▼")
+                </button>
+            </div>
+        </div>
+        @if (showOfferComparison && selectedOfferId > 0 && comparisonOfferLots != null)
+        {
+            <div class="card-body p-2" style="font-size:0.75rem;">
+                <div class="row g-2">
+                    @* LEFT: Raw PDF Text *@
+                    <div class="col-md-4">
+                        <div class="border rounded p-2 bg-light" style="height:400px; overflow-y:auto;">
+                            <h6 class="fw-bold text-muted mb-1" style="font-size:0.75rem;">📄 PDF Text gốc</h6>
+                            <pre id="lotPdfTextPanel" style="white-space:pre-wrap; font-size:0.7rem; font-family:monospace; line-height:1.4; margin:0;">@(comparisonPdfText ?? "Offer này chưa có PDF text (upload trước v2.2)")</pre>
+                        </div>
+                    </div>
+                    @* RIGHT: OfferLots from that Offer *@
+                    <div class="col-md-8">
+                        <div class="border rounded" style="height:400px; overflow:auto;">
+                            <table class="table table-bordered table-hover table-sm mb-0" style="font-size:0.7rem;">
+                                <thead class="table-dark sticky-top">
+                                    <tr>
+                                        <th>#</th>
+                                        <th>LotCode</th>
+                                        <th>Origin</th>
+                                        <th>Crop</th>
+                                        <th>QTY</th>
+                                        <th>Type</th>
+                                        <th>Color</th>
+                                        <th>Leaf</th>
+                                        <th>Staple</th>
+                                        <th>Mic</th>
+                                        <th>Str</th>
+                                        <th>Basis</th>
+                                        <th>Fixed</th>
+                                        <th>Settle</th>
+                                        <th>Ship</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @{ int cmpRow = 0; }
+                                    @foreach (var ol in comparisonOfferLots)
+                                    {
+                                        cmpRow++;
+                                        var bDisplay = ol.BasisCents != 0 ? (ol.BasisCents * 100m).ToString("N0") : "";
+                                        var fDisplay = ol.OutrightPrice != 0 ? ol.OutrightPrice.ToString("N2") : "";
+                                        <tr class="@(highlightedOfferLotId == ol.LotId ? "table-warning" : "")" style="cursor:pointer;"
+                                            @onclick="() => HighlightOfferLot(ol)" title="Click để tìm trong PDF text">
+                                            <td class="text-muted">@cmpRow</td>
+                                            <td class="fw-bold">@ol.LotCode</td>
+                                            <td>@ol.Origin</td>
+                                            <td>@ol.CropYear</td>
+                                            <td class="text-end">@(ol.Quantity > 0 ? ol.Quantity.ToString("N0") : "—")</td>
+                                            <td>@ol.Type</td>
+                                            <td>@ol.ColorSpec</td>
+                                            <td>@ol.LeafSpec</td>
+                                            <td>@ol.LengthSpec</td>
+                                            <td>@ol.MicronaireSpec</td>
+                                            <td>@ol.StrengthSpec</td>
+                                            <td class="text-end">@bDisplay</td>
+                                            <td class="text-end">@fDisplay</td>
+                                            <td>@ol.SettlementMonth</td>
+                                            <td>@ol.ShipmentDateText</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-1 text-muted" style="font-size:0.7rem;">
+                    <i class="bi bi-info-circle me-1"></i>Click dòng lot để highlight text tương ứng trong PDF gốc.
+                </div>
+            </div>
+        }
+    </div>
+
     @* ── Lot Table ── *@
     <style>
         .lot-grid { font-size: 0.75rem; border-collapse: collapse; }
@@ -257,10 +346,19 @@
     private Lot? hviLot;
     private HVIReport? editingHvi;
 
+    // Offer Comparison
+    private List<Offer> offerList = new();
+    private int selectedOfferId = 0;
+    private bool showOfferComparison = false;
+    private List<OfferLot>? comparisonOfferLots;
+    private string? comparisonPdfText;
+    private int? highlightedOfferLotId;
+
     protected override async Task OnInitializedAsync()
     {
         shipperList = await Context.Shippers.Where(s => s.IsActive).OrderBy(s => s.Name).ToListAsync();
         originList = await Context.Lots.Select(l => l.Origin).Distinct().OrderBy(o => o).ToListAsync();
+        offerList = await Context.Offers.OrderByDescending(o => o.CreatedAt).Take(30).ToListAsync();
         await LoadLots();
     }
 
@@ -391,6 +489,41 @@
             await Context.SaveChangesAsync();
             showHviModal = false;
         }
+    }
+
+    // ── Offer Comparison ──
+    private async Task LoadOfferComparison()
+    {
+        if (selectedOfferId == 0)
+        {
+            comparisonOfferLots = null;
+            comparisonPdfText = null;
+            showOfferComparison = false;
+            return;
+        }
+
+        var offer = await Context.Offers.FindAsync(selectedOfferId);
+        comparisonPdfText = offer?.RawPdfText;
+        comparisonOfferLots = await Context.OfferLots
+            .Where(ol => ol.OfferId == selectedOfferId)
+            .OrderBy(ol => ol.LotId)
+            .ToListAsync();
+        showOfferComparison = true;
+    }
+
+    private async Task HighlightOfferLot(OfferLot lot)
+    {
+        highlightedOfferLotId = lot.LotId;
+        var searchTerms = new List<string>();
+        if (!string.IsNullOrEmpty(lot.LotCode) && !lot.LotCode.Contains("-0") && lot.LotCode.Length > 3)
+            searchTerms.Add(lot.LotCode.Split('-')[0]);
+        if (lot.Quantity > 0) searchTerms.Add(((int)lot.Quantity).ToString());
+        if (lot.OutrightPrice > 0) searchTerms.Add(lot.OutrightPrice.ToString("N2"));
+        if (lot.BasisCents != 0) searchTerms.Add(((int)(lot.BasisCents * 100)).ToString());
+
+        var searchJson = System.Text.Json.JsonSerializer.Serialize(searchTerms);
+        await JS.InvokeVoidAsync("highlightPdfTextInPanel", "lotPdfTextPanel", searchJson);
+        StateHasChanged();
     }
 
     // ── Export selected lots ──

@@ -855,17 +855,10 @@
     private async Task HighlightLot(OfferLot lot)
     {
         highlightedLotId = lot.LotId;
-        // First element = primary (LotCode), rest = secondary (need >=2 to match)
-        var searchTerms = new List<string>();
-        var code = lot.LotCode?.Trim() ?? "";
-        if (code.Length > 2) searchTerms.Add(code);
-        else searchTerms.Add(""); // placeholder so index 0 = primary
-        if (lot.Quantity > 0) searchTerms.Add(((int)lot.Quantity).ToString());
-        if (lot.BasisCents != 0) searchTerms.Add(((int)(lot.BasisCents * 100)).ToString());
-        if (lot.OutrightPrice > 0) searchTerms.Add(lot.OutrightPrice.ToString("N2"));
-
-        var searchJson = System.Text.Json.JsonSerializer.Serialize(searchTerms);
-        await JSRuntime.InvokeVoidAsync("highlightPdfText", searchJson);
+        if (lot.SourceLineNumber.HasValue)
+        {
+            await JSRuntime.InvokeVoidAsync("highlightPdfLine", "pdfTextPanel", lot.SourceLineNumber.Value);
+        }
         StateHasChanged();
     }
 

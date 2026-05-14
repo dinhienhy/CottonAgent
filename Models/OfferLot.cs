@@ -67,6 +67,9 @@ public class OfferLot
     [MaxLength(50)]
     public string? StrengthSpec { get; set; }
 
+    public int? SourceLineNumber { get; set; }
+    public string? SourceRawLine { get; set; }
+
     public int? MasterLotId { get; set; }
 
     [ForeignKey(nameof(MasterLotId))]

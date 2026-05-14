@@ -37,8 +37,9 @@ public class BrighannParser : IShipperParser
         }
 
         // Pass 2: Parse lots
-        foreach (var rawRow in rows)
+        for (int i = 0; i < rows.Count; i++)
         {
+            var rawRow = rows[i];
             var row = rawRow.Trim();
             if (string.IsNullOrWhiteSpace(row)) continue;
 
@@ -62,6 +63,8 @@ public class BrighannParser : IShipperParser
             var lot = TryParseLine(row, offerId, currentOrigin, currentCropYear, ref seqNum);
             if (lot != null)
             {
+                lot.SourceLineNumber = i;
+                lot.SourceRawLine = rawRow.Trim();
                 Console.WriteLine($"[Brighann] Parsed: {lot.LotCode} | {lot.Origin} | Basis={lot.BasisCents} | Fixed={lot.OutrightPrice} | Ship={lot.ShipmentDateText}");
                 result.Lots.Add(lot);
             }

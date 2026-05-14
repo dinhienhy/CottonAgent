@@ -131,6 +131,8 @@ namespace CBAS.Web.Migrations
                     b.Property<DateTime?>("ShipmentDate").HasColumnType("timestamp with time zone");
                     b.Property<string>("ShipmentDateText").HasMaxLength(100).HasColumnType("character varying(100)");
                     b.Property<string>("SpecialSpec").HasMaxLength(500).HasColumnType("character varying(500)");
+                    b.Property<int?>("SourceLineNumber").HasColumnType("integer");
+                    b.Property<string>("SourceRawLine").HasColumnType("text");
                     b.Property<string>("StrengthSpec").HasMaxLength(50).HasColumnType("character varying(50)");
                     b.Property<string>("Type").IsRequired().HasMaxLength(100).HasColumnType("character varying(100)");
                     b.Property<int?>("MasterLotId").HasColumnType("integer");

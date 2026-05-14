@@ -263,7 +263,60 @@ public class PdfParserService : IPdfParserService
             result.Lots.Add(offerLot);
         }
 
+        // Post-match: link each lot to its source line in rawText
+        PostMatchSourceLines(result.Lots, rawText);
+
         return result;
+    }
+
+    private static void PostMatchSourceLines(List<OfferLot> lots, string? rawText)
+    {
+        if (string.IsNullOrEmpty(rawText)) return;
+        var lines = rawText.Split('\n');
+        var usedLines = new HashSet<int>();
+
+        foreach (var lot in lots)
+        {
+            int bestLine = -1;
+            int bestScore = 0;
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (usedLines.Contains(i)) continue;
+                var lower = lines[i].ToLowerInvariant();
+                int score = 0;
+
+                // LotCode match (strongest signal)
+                if (!string.IsNullOrEmpty(lot.LotCode) && lot.LotCode.Length > 2 &&
+                    lower.Contains(lot.LotCode.ToLowerInvariant()))
+                    score += 10;
+
+                // Quantity match
+                if (lot.Quantity > 0 && lower.Contains(((int)lot.Quantity).ToString()))
+                    score += 3;
+
+                // Basis/price match
+                if (lot.BasisCents != 0)
+                {
+                    var basisStr = lot.BasisCents.ToString("F2");
+                    if (lower.Contains(basisStr)) score += 3;
+                }
+                if (lot.OutrightPrice > 0)
+                {
+                    var priceStr = lot.OutrightPrice.ToString("F2");
+                    if (lower.Contains(priceStr)) score += 3;
+                }
+
+                if (score > bestScore) { bestScore = score; bestLine = i; }
+            }
+
+            if (bestLine >= 0 && bestScore >= 3)
+            {
+                lot.SourceLineNumber = bestLine;
+                lot.SourceRawLine = lines[bestLine].Trim();
+                usedLines.Add(bestLine);
+            }
+        }
     }
 
     private static string? BuildSpecialSpec(ClaudeOfferLot lot)

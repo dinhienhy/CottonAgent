@@ -113,6 +113,8 @@ public class ToyoshimaParser : IShipperParser
             var lot = TryParseOfferLine(row, offerId, currentOrigin);
             if (lot != null)
             {
+                lot.SourceLineNumber = i;
+                lot.SourceRawLine = row;
                 if (!string.IsNullOrEmpty(lot.CropYear))
                     currentCropYear = lot.CropYear;
                 else if (!string.IsNullOrEmpty(currentCropYear))

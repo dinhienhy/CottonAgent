@@ -40,8 +40,9 @@ public class OlamParser : IShipperParser
         }
 
         // Pass 2: Parse lots
-        foreach (var rawRow in rows)
+        for (int i = 0; i < rows.Count; i++)
         {
+            var rawRow = rows[i];
             var row = rawRow.Trim();
             if (string.IsNullOrWhiteSpace(row)) continue;
             if (IsSkipRow(row)) continue;
@@ -66,6 +67,8 @@ public class OlamParser : IShipperParser
             var lot = TryParseLine(row, offerId, currentOrigin, currentCropYear, currentShipment, currentSettlement, currentType, ref seq);
             if (lot != null)
             {
+                lot.SourceLineNumber = i;
+                lot.SourceRawLine = rawRow.Trim();
                 Console.WriteLine($"[Olam] Parsed: {lot.LotCode} | {lot.Origin} | Mic={lot.MicronaireSpec} | Len={lot.LengthSpec} | Str={lot.StrengthSpec} | Basis={lot.BasisCents} | Fixed={lot.OutrightPrice}");
                 result.Lots.Add(lot);
             }

@@ -124,13 +124,28 @@ public class PdfParserService : IPdfParserService
     public async Task<OfferParseResult> ParseOfferPdfWithAIAsync(Stream pdfStream, int offerId, string fileName, int? shipperId)
     {
         var rawText = ExtractTextFromPdf(pdfStream);
+        var rows = rawText.Split('\n').ToList();
 
-        // AI primary: try Claude first
+        // Step 1: Try rule-based parser first (deterministic, preferred)
+        var ruleParser = _parsers.FirstOrDefault(p => p.CanParse(fileName, rows));
+        if (ruleParser != null)
+        {
+            Console.WriteLine($"[Parser] Using rule-based parser: {ruleParser.ShipperName} (file: {fileName})");
+            var ruleLog = new ClaudeParseLog { Used = false, Status = "skipped" };
+            ruleLog.AddStep($"Rule-based parser detected: {ruleParser.ShipperName}. Skipping AI.");
+            var ruleResult = ruleParser.Parse(rows, offerId);
+            ruleResult.DetectedShipper = ruleParser.ShipperName;
+            ruleResult.RawText = rawText;
+            ruleResult.AILog = ruleLog;
+            return ruleResult;
+        }
+
+        // Step 2: No rule-based parser matched → try AI
         if (_claudeParser.IsAvailable)
         {
             try
             {
-                Console.WriteLine($"[AI Parser] Attempting Claude parse for: {fileName}");
+                Console.WriteLine($"[AI Parser] No rule-based parser matched. Attempting Claude parse for: {fileName}");
                 var (aiResult, log) = await _claudeParser.ParseOfferWithLogAsync(rawText, shipperId);
                 if (aiResult != null && aiResult.Lots.Count > 0)
                 {
@@ -139,38 +154,42 @@ public class PdfParserService : IPdfParserService
                     result.AILog = log;
                     return result;
                 }
-                // AI failed or no lots
                 log.FellBackToRegex = true;
-                log.AddStep("Falling back to regex parser");
-                Console.WriteLine("[AI Parser] No lots returned, falling back to regex");
-                pdfStream.Position = 0;
-                var fallbackResult = ParseOfferPdfInternal(pdfStream, offerId, fileName);
-                fallbackResult.AILog = log;
-                return fallbackResult;
+                log.AddStep("AI returned no lots.");
+                Console.WriteLine("[AI Parser] No lots returned.");
+                return new OfferParseResult
+                {
+                    DetectedShipper = "Unknown",
+                    RawText = rawText,
+                    AILog = log
+                };
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[AI Parser] Error: {ex.Message}, falling back to regex");
+                Console.WriteLine($"[AI Parser] Error: {ex.Message}");
                 var errorLog = new ClaudeParseLog
                 {
                     Used = true, Status = "error", ErrorMessage = ex.Message, FellBackToRegex = true
                 };
                 errorLog.AddStep($"EXCEPTION: {ex.Message}");
-                errorLog.AddStep("Falling back to regex parser");
-                pdfStream.Position = 0;
-                var fallbackResult = ParseOfferPdfInternal(pdfStream, offerId, fileName);
-                fallbackResult.AILog = errorLog;
-                return fallbackResult;
+                return new OfferParseResult
+                {
+                    DetectedShipper = "Unknown",
+                    RawText = rawText,
+                    AILog = errorLog
+                };
             }
         }
 
-        // No AI available
+        // Step 3: No parser, no AI
         var noAiLog = new ClaudeParseLog { Used = false, Status = "idle" };
-        noAiLog.AddStep("AI Parser not available (no API key). Using regex only.");
-        pdfStream.Position = 0;
-        var regexResult = ParseOfferPdfInternal(pdfStream, offerId, fileName);
-        regexResult.AILog = noAiLog;
-        return regexResult;
+        noAiLog.AddStep("No rule-based parser matched. AI not available.");
+        return new OfferParseResult
+        {
+            DetectedShipper = "Unknown",
+            RawText = rawText,
+            AILog = noAiLog
+        };
     }
 
     private string ExtractTextFromPdf(Stream pdfStream)

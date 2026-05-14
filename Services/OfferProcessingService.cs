@@ -339,47 +339,34 @@ public class OfferProcessingService : IOfferProcessingService
 
             try
             {
-                var lot = await _context.Lots.FirstOrDefaultAsync(l => l.LotCode == offerLot.LotCode);
+                // Each OfferLot = 1 separate Lot (no merge on duplicate LotCode)
+                var lotCode = offerLot.LotCode!;
+                var exists = await _context.Lots.AnyAsync(l => l.LotCode == lotCode);
+                if (exists)
+                    lotCode = $"{lotCode}-{offerLot.LotId}";
 
-                if (lot == null)
+                var lot = new Lot
                 {
-                    lot = new Lot
-                    {
-                        LotCode = offerLot.LotCode,
-                        ShipperId = shipperId.Value,
-                        Origin = offerLot.Origin,
-                        CropYear = offerLot.CropYear,
-                        Type = offerLot.Type,
-                        QuantityOriginal = offerLot.Quantity,
-                        QuantityAvailable = offerLot.Quantity,
-                        BasisCents = offerLot.BasisCents,
-                        OutrightPrice = offerLot.OutrightPrice,
-                        ShipmentDate = offerLot.ShipmentDate,
-                        ShipmentDateText = offerLot.ShipmentDateText,
-                        SpecialSpec = offerLot.SpecialSpec,
-                        Status = LotStatus.Available,
-                        LatestOfferId = offerId,
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    };
-                    _context.Lots.Add(lot);
-                    await _context.SaveChangesAsync();
-                    created++;
-                }
-                else
-                {
-                    lot.QuantityAvailable = offerLot.Quantity;
-                    lot.BasisCents = offerLot.BasisCents;
-                    lot.OutrightPrice = offerLot.OutrightPrice;
-                    lot.ShipmentDate = offerLot.ShipmentDate;
-                    lot.ShipmentDateText = offerLot.ShipmentDateText;
-                    lot.SpecialSpec = offerLot.SpecialSpec;
-                    lot.LatestOfferId = offerId;
-                    lot.UpdatedAt = DateTime.UtcNow;
-                    if (!string.IsNullOrEmpty(offerLot.Origin)) lot.Origin = offerLot.Origin;
-                    if (!string.IsNullOrEmpty(offerLot.CropYear)) lot.CropYear = offerLot.CropYear;
-                    updated++;
-                }
+                    LotCode = lotCode,
+                    ShipperId = shipperId.Value,
+                    Origin = offerLot.Origin,
+                    CropYear = offerLot.CropYear,
+                    Type = offerLot.Type,
+                    QuantityOriginal = offerLot.Quantity,
+                    QuantityAvailable = offerLot.Quantity,
+                    BasisCents = offerLot.BasisCents,
+                    OutrightPrice = offerLot.OutrightPrice,
+                    ShipmentDate = offerLot.ShipmentDate,
+                    ShipmentDateText = offerLot.ShipmentDateText,
+                    SpecialSpec = offerLot.SpecialSpec,
+                    Status = LotStatus.Available,
+                    LatestOfferId = offerId,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _context.Lots.Add(lot);
+                await _context.SaveChangesAsync();
+                created++;
 
                 offerLot.MasterLotId = lot.Id;
 

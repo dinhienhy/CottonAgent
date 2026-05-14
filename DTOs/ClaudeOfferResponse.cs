@@ -49,6 +49,9 @@ public class ClaudeOfferLot
     [JsonPropertyName("str_gpt_cuong_luc")]
     public string? StrGptCuongLuc { get; set; }
 
+    [JsonPropertyName("crop_year")]
+    public string? CropYear { get; set; }
+
     [JsonPropertyName("basis")]
     public decimal? Basis { get; set; }
 

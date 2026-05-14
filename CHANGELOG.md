@@ -2,6 +2,31 @@
 
 All notable changes to the Cotton Broker Automation System (CBAS) will be documented in this file.
 
+## [2.2.0] - 2026-05-14
+
+### Improved — AI Parser v2.2 (Feedback Fixes)
+
+#### System Prompt tối ưu mạnh
+- **Staple decode chi tiết**: hỗ trợ cả dạng fraction (1-1/8, 1-3/16) và decimal (35.55, Stpl 33.83)
+- **Mexico vs Mỹ**: prompt yêu cầu rõ "Không được nhầm Mexico thành Mỹ"
+- **Crop Year bắt buộc**: AI phải trích xuất rõ ràng (25/26, 2025, 2026 Crop…)
+- **Basis & Giá**: ưu tiên Fix price, ghi points (1850, 1100), không bỏ sót
+- **Shipment chuẩn hóa**: chỉ dùng 4 giá trị Origin / Prompt / Afloat / Warehouse
+
+#### JSON Schema + DTO
+- Thêm field `crop_year` (bắt buộc) vào schema + `ClaudeOfferLot.CropYear`
+- `ConvertAIResult` map `crop_year` → `OfferLot.CropYear`
+
+#### Model mặc định
+- Đổi sang `claude-3-5-sonnet-20241022` (Sonnet 3.5 v2)
+
+#### Truncation Recovery
+- Khi `stop_reason == "max_tokens"`: tự động repair JSON bị cắt (đóng brackets/braces)
+- Nếu repair thành công → parse lots đã nhận, log warning "có thể thiếu lots cuối"
+- Nếu repair thất bại → fallback regex parser
+
+---
+
 ## [2.1.0] - 2026-05-13
 
 ### Fixed — Lot Data Persistence & Prompt Caching

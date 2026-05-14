@@ -235,6 +235,7 @@ public class PdfParserService : IPdfParserService
                 OfferId = offerId,
                 LotCode = lotCode,
                 Origin = lot.LoaiBong ?? aiResult.Shipper,
+                CropYear = lot.CropYear ?? string.Empty,
                 Quantity = lot.QuantityTan,
                 Type = lot.TypeAllBci ?? lot.LoaiBong ?? string.Empty,
                 SpecialSpec = BuildSpecialSpec(lot),

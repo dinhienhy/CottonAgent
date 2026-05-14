@@ -45,19 +45,29 @@
         window.highlightPdfText = function (searchTermsJson, panelId) {
             const panel = document.getElementById(panelId || 'pdfTextPanel');
             if (!panel) return;
-            const terms = JSON.parse(searchTermsJson).filter(t => t && t.length > 1);
-            if (terms.length === 0) return;
+            const parsed = JSON.parse(searchTermsJson);
+            const primary = parsed[0] || '';  // LotCode = first term
+            const others = parsed.slice(1).filter(t => t && t.length > 1);
+            if (!primary && others.length === 0) return;
 
             // Reset any previous highlights
             const original = panel.getAttribute('data-original') || panel.textContent;
             panel.setAttribute('data-original', original);
 
-            // Find lines containing ANY search term
             const lines = original.split('\n');
             let firstMatchIdx = -1;
+
+            // Strategy: find lines matching primary (LotCode). If none, find lines matching >=2 other terms.
+            const minMatch = others.length >= 2 ? 2 : 1;
             const highlighted = lines.map((line, idx) => {
                 const lower = line.toLowerCase();
-                const match = terms.some(t => lower.includes(t.toLowerCase()));
+                let match = false;
+                if (primary && primary.length > 2 && lower.includes(primary.toLowerCase())) {
+                    match = true;
+                } else if (others.length > 0) {
+                    const hits = others.filter(t => lower.includes(t.toLowerCase())).length;
+                    match = hits >= minMatch;
+                }
                 if (match && firstMatchIdx < 0) firstMatchIdx = idx;
                 return match ? '<mark style="background:#ffe066;display:block;padding:1px 2px;">' + line.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</mark>'
                              : line.replace(/</g,'&lt;').replace(/>/g,'&gt;');

@@ -855,13 +855,14 @@
     private async Task HighlightLot(OfferLot lot)
     {
         highlightedLotId = lot.LotId;
-        // Build search terms from lot data — try LotCode first, then quantity + basis
+        // First element = primary (LotCode), rest = secondary (need >=2 to match)
         var searchTerms = new List<string>();
-        if (!string.IsNullOrEmpty(lot.LotCode) && !lot.LotCode.Contains("-0") && lot.LotCode.Length > 3)
-            searchTerms.Add(lot.LotCode.Split('-')[0]); // base code without suffix
+        var code = lot.LotCode?.Trim() ?? "";
+        if (code.Length > 2) searchTerms.Add(code);
+        else searchTerms.Add(""); // placeholder so index 0 = primary
         if (lot.Quantity > 0) searchTerms.Add(((int)lot.Quantity).ToString());
-        if (lot.OutrightPrice > 0) searchTerms.Add(lot.OutrightPrice.ToString("N2"));
         if (lot.BasisCents != 0) searchTerms.Add(((int)(lot.BasisCents * 100)).ToString());
+        if (lot.OutrightPrice > 0) searchTerms.Add(lot.OutrightPrice.ToString("N2"));
 
         var searchJson = System.Text.Json.JsonSerializer.Serialize(searchTerms);
         await JSRuntime.InvokeVoidAsync("highlightPdfText", searchJson);

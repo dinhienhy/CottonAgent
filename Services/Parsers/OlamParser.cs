@@ -69,7 +69,7 @@ public class OlamParser : IShipperParser
             {
                 lot.SourceLineNumber = i;
                 lot.SourceRawLine = rawRow.Trim();
-                Console.WriteLine($"[Olam] Parsed: {lot.LotCode} | {lot.Origin} | Mic={lot.MicronaireSpec} | Len={lot.LengthSpec} | Str={lot.StrengthSpec} | Basis={lot.BasisCents} | Fixed={lot.OutrightPrice}");
+                Console.WriteLine($"[Olam] Parsed: {lot.LotCode} | {lot.Origin} | Color={lot.ColorSpec} | Leaf={lot.LeafSpec} | Len={lot.LengthSpec} | Mic={lot.MicronaireSpec} | Str={lot.StrengthSpec} | Basis={lot.BasisCents} | Fixed={lot.OutrightPrice}");
                 result.Lots.Add(lot);
             }
         }
@@ -146,7 +146,7 @@ public class OlamParser : IShipperParser
         if (m1.Success)
             return MakeLot(offerId, m1.Groups[2].Value, origin, cropYear, m1.Groups[3].Value,
                 decimal.Parse(m1.Groups[1].Value, CultureInfo.InvariantCulture),
-                m1.Groups[4].Value, m1.Groups[5].Value, m1.Groups[6].Value,
+                m1.Groups[4].Value, m1.Groups[5].Value, m1.Groups[6].Value, null, null,
                 decimal.Parse(m1.Groups[7].Value, CultureInfo.InvariantCulture), 0,
                 settlement, $"ETA {m1.Groups[8].Value}", ParseEtaDate(m1.Groups[8].Value));
 
@@ -156,7 +156,7 @@ public class OlamParser : IShipperParser
         if (m2.Success)
             return MakeLot(offerId, m2.Groups[2].Value, origin, cropYear, m2.Groups[3].Value,
                 decimal.Parse(m2.Groups[1].Value, CultureInfo.InvariantCulture),
-                m2.Groups[4].Value, m2.Groups[5].Value, m2.Groups[6].Value,
+                m2.Groups[4].Value, m2.Groups[5].Value, m2.Groups[6].Value, null, null,
                 decimal.Parse(m2.Groups[7].Value, CultureInfo.InvariantCulture),
                 int.Parse(m2.Groups[8].Value) / 100m,
                 settlement, shipment, ParseShipmentText(shipment));
@@ -167,10 +167,11 @@ public class OlamParser : IShipperParser
         if (m3.Success)
         {
             var specInfo = m3.Groups[3].Value;
-            var (mic, str, staple) = ParseSpecInfo(specInfo);
-            return MakeLot(offerId, m3.Groups[2].Value, origin, cropYear, specInfo,
+            var (mic, str, staple, color, leaf) = ParseSpecInfo(specInfo);
+            var type = ExtractType(specInfo);
+            return MakeLot(offerId, m3.Groups[2].Value, origin, cropYear, type,
                 decimal.Parse(m3.Groups[1].Value, CultureInfo.InvariantCulture),
-                staple, mic, str, 0, int.Parse(m3.Groups[4].Value) / 100m,
+                staple, mic, str, color, leaf, 0, int.Parse(m3.Groups[4].Value) / 100m,
                 m3.Groups[5].Value, shipment, ParseShipmentText(shipment));
         }
 
@@ -182,7 +183,7 @@ public class OlamParser : IShipperParser
             decimal qty = 0;
             if (!string.IsNullOrEmpty(m4.Groups[1].Value)) decimal.TryParse(m4.Groups[1].Value, out qty);
             return MakeLot(offerId, m4.Groups[2].Value, origin, cropYear, m4.Groups[3].Value,
-                qty, m4.Groups[4].Value, m4.Groups[5].Value, m4.Groups[6].Value,
+                qty, m4.Groups[4].Value, m4.Groups[5].Value, m4.Groups[6].Value, null, null,
                 decimal.Parse(m4.Groups[7].Value, CultureInfo.InvariantCulture),
                 int.Parse(m4.Groups[8].Value) / 100m,
                 settlement, shipment, ParseShipmentText(shipment));
@@ -196,7 +197,7 @@ public class OlamParser : IShipperParser
             if (spec.Contains("Crop") || spec.Contains("On Call") || spec.Contains("request") || spec.Contains("regenagri")) return null;
             decimal qty = 0;
             if (!string.IsNullOrEmpty(m5.Groups[1].Value)) decimal.TryParse(m5.Groups[1].Value, out qty);
-            var (mic, str, staple) = ParseSpecInfo(spec);
+            var (mic, str, staple, color, leaf) = ParseSpecInfo(spec);
             seq++;
             var lotCode = $"OL-{origin[..Math.Min(2, origin.Length)]}-{seq:D3}";
             return new OfferLot
@@ -207,6 +208,7 @@ public class OlamParser : IShipperParser
                 OutrightPrice = 0, BasisCents = int.Parse(m5.Groups[3].Value) / 100m,
                 PriceCentsPerLb = 0, SettlementMonth = m5.Groups[4].Value,
                 ShipmentDateText = shipment, ShipmentDate = ParseShipmentText(shipment),
+                ColorSpec = color, LeafSpec = leaf,
                 MicronaireSpec = mic, StrengthSpec = str, LengthSpec = staple
             };
         }
@@ -223,7 +225,7 @@ public class OlamParser : IShipperParser
             if (!string.IsNullOrEmpty(m6.Groups[1].Value)) decimal.TryParse(m6.Groups[1].Value, out qty);
             var fixedPrice = decimal.Parse(m6.Groups[3].Value, CultureInfo.InvariantCulture);
             var basisPts = int.Parse(m6.Groups[4].Value);
-            var (mic, str, staple) = ParseSpecInfo(spec);
+            var (mic, str, staple, color, leaf) = ParseSpecInfo(spec);
 
             // Try to extract lot name from spec
             string? lotName = null;
@@ -242,6 +244,7 @@ public class OlamParser : IShipperParser
                 OutrightPrice = fixedPrice, BasisCents = basisPts / 100m,
                 PriceCentsPerLb = fixedPrice, SettlementMonth = settlement,
                 ShipmentDateText = shipment, ShipmentDate = ParseShipmentText(shipment),
+                ColorSpec = color, LeafSpec = leaf,
                 MicronaireSpec = mic, StrengthSpec = str, LengthSpec = staple
             };
         }
@@ -250,7 +253,7 @@ public class OlamParser : IShipperParser
     }
 
     private OfferLot MakeLot(int offerId, string lotCode, string origin, string cropYear, string type,
-        decimal qty, string? staple, string? mic, string? str,
+        decimal qty, string? staple, string? mic, string? str, string? color, string? leaf,
         decimal fixedPrice, decimal basisCents, string? settlement, string? shipText, DateTime? shipDate)
     {
         return new OfferLot
@@ -262,6 +265,7 @@ public class OlamParser : IShipperParser
             PriceCentsPerLb = fixedPrice > 0 ? fixedPrice : 0,
             SettlementMonth = settlement,
             ShipmentDateText = shipText, ShipmentDate = shipDate,
+            ColorSpec = color, LeafSpec = leaf,
             MicronaireSpec = mic, StrengthSpec = str, LengthSpec = staple
         };
     }
@@ -272,23 +276,44 @@ public class OlamParser : IShipperParser
         return m.Success ? m.Value : spec.Split(' ')[0];
     }
 
-    private (string? mic, string? str, string? staple) ParseSpecInfo(string spec)
+    private (string? mic, string? str, string? staple, string? color, string? leaf) ParseSpecInfo(string spec)
     {
-        string? mic = null, str = null, staple = null;
-        // Mic: "4.5 Mic" or "G5" or "G6" or "Mic 4.28 Avg"
+        string? mic = null, str = null, staple = null, color = null, leaf = null;
+
+        // Pattern: "31-3-38" or "31-3-38+" → Color=31, Leaf=3, Staple=38(+)
+        var codeM = Regex.Match(spec, @"\b(\d{2})-(\d)-(\d{2}[+]?)\b");
+        if (codeM.Success)
+        {
+            color = codeM.Groups[1].Value;
+            leaf = codeM.Groups[2].Value;
+            staple = codeM.Groups[3].Value;
+        }
+
+        // Staple: "1-3/16" or "1-1/8" (fraction format, not Color-Leaf-Staple)
+        if (staple == null)
+        {
+            var fracM = Regex.Match(spec, @"\b(\d+-\d+/\d+)\b");
+            if (fracM.Success) staple = fracM.Groups[1].Value;
+        }
+        // Staple: "Stpl 35.55"
+        if (staple == null)
+        {
+            var stplM = Regex.Match(spec, @"Stpl\s*([\d.]+)");
+            if (stplM.Success) staple = stplM.Groups[1].Value;
+        }
+
+        // Mic: "4.5 Mic" or "Mic 4.28 Avg" or "G5"/"G6"
         var micM = Regex.Match(spec, @"([\d.]+)\s*Mic|Mic\s*([\d.]+)");
         if (micM.Success) mic = micM.Groups[1].Success ? micM.Groups[1].Value : micM.Groups[2].Value;
         if (mic == null) { var gm = Regex.Match(spec, @"\bG(\d)\b"); if (gm.Success) mic = gm.Value; }
+
         // Str: "32 GPT" or "Gpt 27.20" or "28 Min"
         var strM = Regex.Match(spec, @"(\d+(?:\.\d+)?)\s*(?:GPT|Gpt)|(?:GPT|Gpt)\s*([\d.]+)");
         if (strM.Success) str = strM.Groups[1].Success ? strM.Groups[1].Value : strM.Groups[2].Value;
         if (str == null) { var minM = Regex.Match(spec, @"(\d+)\s+Min"); if (minM.Success) str = minM.Groups[1].Value; }
-        // Also check standalone "29" or "28" at end of spec (after G5/G6)
         if (str == null) { var numM = Regex.Match(spec, @"G\d\s+(\d+)$"); if (numM.Success) str = numM.Groups[1].Value; }
-        // Staple: "1-3/16" or "31-3-38" or "Stpl 35.55"
-        var stplM = Regex.Match(spec, @"Stpl\s*([\d.]+)|(\d+-\d+/\d+|\d+-\d+-\d+[+]?)");
-        if (stplM.Success) staple = stplM.Groups[1].Success ? stplM.Groups[1].Value : stplM.Groups[2].Value;
-        return (mic, str, staple);
+
+        return (mic, str, staple, color, leaf);
     }
 
     private DateTime? ParseEtaDate(string eta)

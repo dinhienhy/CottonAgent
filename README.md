@@ -1,6 +1,6 @@
 # Cotton Broker Automation System (CBAS)
 
-Hệ thống Tự động Xử lý Offer Bông - Version 1.4
+Hệ thống Tự động Xử lý Offer Bông - Version 1.5
 
 ## Tổng quan
 
@@ -130,6 +130,7 @@ Giá có Commission = Giá (c/kg) - Commission
 ### Offers (`/offers`)
 - Xem lịch sử tất cả offers
 - Filter theo shipper, ngày
+- **Xoá offer**: nút xoá với xác nhận, cascade xoá OfferLots + ProcessedOutputs, gỡ liên kết Lot
 
 ### Lots (`/lots`) — Quản lý Lot nâng cao (v1.4)
 - **20 cột**: Lot Code, Shipper, Origin, CropYear, Type/Spec, Shipment/ETA, QTY Orig, QTY Avail, Mic, Len, GPT, Basis, Giá c/kg, +Comm, Net, Status, HVI, Action
@@ -140,7 +141,8 @@ Giá có Commission = Giá (c/kg) - Commission
 - Filter: shipper, origin, status, lot code, **shipment month**
 - Summary cards: Available / Reserved / Sold / Tổng QTY
 - Thay đổi status: Reserve, Sold, Reopen
-- Auto-sync: khi upload Offer mới, tự tạo/update Lot + Basis + OutrightPrice + Shipment
+- **So sánh PDF ↔ Lots**: chọn Offer → hiển thị raw PDF text bên trái, bảng lots bên phải, click lot → highlight chính xác dòng gốc trong PDF
+- Auto-sync: khi upload Offer mới, **mỗi OfferLot tạo 1 Lot riêng** (1:1, không merge trùng LotCode)
 - Auto-create HVIReport từ spec data (Mic/Len/GPT) khi parse Offer
 
 ## Cấu trúc Database
@@ -168,7 +170,10 @@ Giá có Commission = Giá (c/kg) - Commission
 - LatestOfferId (FK → Offers), HVIReportId (FK → HVIReports)
 - CreatedAt, UpdatedAt
 
-### Bảng OfferLots
+### Bảng Offers (cập nhật v1.5)
+- RawPdfText (text, nullable) — lưu full text PDF gốc để so sánh
+
+### Bảng OfferLots (cập nhật v1.5)
 - LotId (PK), OfferId (FK)
 - LotCode (nullable - generic lines không có lot code)
 - MasterLotId (FK → Lots, nullable)
@@ -177,6 +182,8 @@ Giá có Commission = Giá (c/kg) - Commission
 - OutrightPrice, SettlementMonth, ShipmentDateText
 - ColorSpec, LeafSpec, LengthSpec, MicronaireSpec, StrengthSpec
 - PriceCentsPerLb
+- **SourceLineNumber** (int?, nullable) — dòng gốc trong PDF raw text
+- **SourceRawLine** (text, nullable) — nội dung dòng gốc để debug
 
 ### Bảng HVIReports
 - HVIId (PK), LotCode (Unique), MasterLotId (FK → Lots, nullable), FileName
@@ -250,9 +257,16 @@ Kiểm tra:
 - Kiểm tra file size < 10MB
 - Đảm bảo file là PDF hợp lệ
 
-## Multi-Shipper Parser (v1.4)
+## Multi-Shipper Parser (v1.5)
 
-Hệ thống sử dụng **Strategy Pattern** (`IShipperParser`) để parse PDF từ nhiều shipper:
+Hệ thống sử dụng **Strategy Pattern** (`IShipperParser`) để parse PDF từ nhiều shipper.
+
+### Chiến lược parse (Hybrid)
+
+1. **Rule-based parser ưu tiên** — nếu `CanParse()` match shipper đã biết → dùng regex parser (deterministic, luôn cho kết quả giống nhau)
+2. **AI parser (Claude) chỉ cho shipper unknown** — khi không có rule-based parser nào match
+3. AI config: `temperature=0` (greedy decoding), prompt caching, instruction nhất quán
+4. Mỗi OfferLot lưu `SourceLineNumber` + `SourceRawLine` để highlight chính xác dòng gốc trong PDF
 
 ### Parsers hiện có
 
@@ -275,6 +289,16 @@ Hệ thống sử dụng **Strategy Pattern** (`IShipperParser`) để parse PDF
 - **Brighann**: Auto-gen `{originCode}-{type}{staple}-{seq}` (BR-SM37-001)
 
 ## Lịch sử Version
+
+### v1.5.0 (2026-05-14)
+- **Parser priority**: rule-based parser chạy trước AI → deterministic, cùng file luôn ra cùng kết quả
+- **AI temperature=0**: Claude API set temperature=0 + instruction nhất quán cho shipper chưa có parser
+- **Source line tracking**: mỗi OfferLot lưu `SourceLineNumber` + `SourceRawLine` khi parse
+- **So sánh PDF ↔ Lots**: panel side-by-side trên `/lots` và `/offer-processor`, click lot → highlight chính xác 1 dòng
+- **Xoá offer**: nút xoá trong `/offers` với cascade delete (OfferLots, ProcessedOutputs, gỡ Lot.LatestOfferId)
+- **1:1 Lot mapping**: mỗi OfferLot tạo 1 Lot riêng, không merge trùng LotCode
+- **RawPdfText**: lưu full PDF text trên Offer để so sánh sau
+- Migration: `AddOfferRawPdfText` + `AddOfferLotSourceTracking`
 
 ### v1.4.0 (2026-05-04)
 - **Multi-shipper parser**: Olam (6 patterns), Brighann (CIF format)

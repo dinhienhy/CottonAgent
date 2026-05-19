@@ -199,7 +199,9 @@
                         <th>Shipment</th>
                         <th class="text-end">Orig</th>
                         <th class="text-end">Avail</th>
-                        <th class="text-center" style="border-left:2px solid #ffc107">Mic</th>
+                        <th class="text-center" style="border-left:2px solid #ffc107">Color</th>
+                        <th class="text-center">Leaf</th>
+                        <th class="text-center">Mic</th>
                         <th class="text-center">Len</th>
                         <th class="text-center" style="border-right:2px solid #ffc107">GPT</th>
                         <th class="text-end" style="border-left:2px solid #dc3545">Basis</th>
@@ -214,11 +216,11 @@
                 <tbody>
                     @if (lots == null)
                     {
-                        <tr><td colspan="20" class="text-center py-3">Đang tải...</td></tr>
+                        <tr><td colspan="22" class="text-center py-3">Đang tải...</td></tr>
                     }
                     else if (!lots.Any())
                     {
-                        <tr><td colspan="20" class="text-center py-3 text-muted">Không có lot nào</td></tr>
+                        <tr><td colspan="22" class="text-center py-3 text-muted">Không có lot nào</td></tr>
                     }
                     else
                     {
@@ -240,7 +242,9 @@
                                 <td class="col-info">@lot.ShipmentDateText</td>
                                 <td class="col-qty text-end">@lot.QuantityOriginal.ToString("F0")</td>
                                 <td class="col-qty text-end fw-bold">@lot.QuantityAvailable.ToString("F0")</td>
-                                <td class="col-hvi text-center" style="border-left:2px solid #ffc107">@hvi?.Micronaire?.ToString("F1")</td>
+                                <td class="col-hvi text-center" style="border-left:2px solid #ffc107">@(hvi?.ColorRd?.ToString("F0") ?? hvi?.ColorGrade)</td>
+                                <td class="col-hvi text-center">@hvi?.Leaf?.ToString("F0")</td>
+                                <td class="col-hvi text-center">@hvi?.Micronaire?.ToString("F1")</td>
                                 <td class="col-hvi text-center">@hvi?.Length?.ToString("F2")</td>
                                 <td class="col-hvi text-center" style="border-right:2px solid #ffc107">@hvi?.StrengthGPT?.ToString("F1")</td>
                                 <td class="col-price text-end" style="border-left:2px solid #dc3545">@((lot.BasisCents * 100m).ToString("F0"))</td>

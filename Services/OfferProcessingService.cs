@@ -371,13 +371,14 @@ public class OfferProcessingService : IOfferProcessingService
                 offerLot.MasterLotId = lot.Id;
 
                 // Auto-create/update HVIReport from parsed spec data (Olam/Brighann)
-                var hvi = await _context.HVIReports.FirstOrDefaultAsync(h => h.LotCode == offerLot.LotCode);
+                // Use actual lotCode (may have suffix) for consistency
+                var hvi = await _context.HVIReports.FirstOrDefaultAsync(h => h.LotCode == lotCode);
                 if (hvi == null)
                 {
                     hvi = new HVIReport
                     {
-                        LotCode = offerLot.LotCode,
-                        FileName = $"parsed-{offerLot.LotCode}",
+                        LotCode = lotCode,
+                        FileName = $"parsed-{lotCode}",
                         CreatedAt = DateTime.UtcNow
                     };
                     _context.HVIReports.Add(hvi);
@@ -398,6 +399,17 @@ public class OfferProcessingService : IOfferProcessingService
                 {
                     if (decimal.TryParse(offerLot.StrengthSpec, NumberStyles.Any, CultureInfo.InvariantCulture, out var str))
                         hvi.StrengthGPT = str;
+                }
+                if (string.IsNullOrEmpty(hvi.ColorGrade) && !string.IsNullOrEmpty(offerLot.ColorSpec))
+                {
+                    hvi.ColorGrade = offerLot.ColorSpec;
+                    if (decimal.TryParse(offerLot.ColorSpec, NumberStyles.Any, CultureInfo.InvariantCulture, out var rd))
+                        hvi.ColorRd = rd;
+                }
+                if (!hvi.Leaf.HasValue && !string.IsNullOrEmpty(offerLot.LeafSpec))
+                {
+                    if (decimal.TryParse(offerLot.LeafSpec, NumberStyles.Any, CultureInfo.InvariantCulture, out var lf))
+                        hvi.Leaf = lf;
                 }
                 if (!string.IsNullOrEmpty(offerLot.CropYear))
                     hvi.CropYear = offerLot.CropYear;
@@ -501,7 +513,9 @@ public class OfferProcessingService : IOfferProcessingService
         }
 
         var hviReports = await _context.HVIReports.ToListAsync();
-        var hviDict = hviReports.ToDictionary(h => h.LotCode, h => h);
+        var hviByLotId = hviReports
+            .Where(h => h.MasterLotId.HasValue)
+            .ToDictionary(h => h.MasterLotId!.Value, h => h);
 
         var sortedLots = offer.OfferLots
             .OrderBy(l => l.ShipmentDate)
@@ -519,10 +533,10 @@ public class OfferProcessingService : IOfferProcessingService
                     iceValue = settleIce;
             }
 
-            // Look up HVI data by lot code
+            // Look up HVI data by MasterLotId
             HVIReport? hvi = null;
-            if (!string.IsNullOrEmpty(lot.LotCode))
-                hviDict.TryGetValue(lot.LotCode, out hvi);
+            if (lot.MasterLotId.HasValue)
+                hviByLotId.TryGetValue(lot.MasterLotId.Value, out hvi);
 
             // Price: use FixedPrice if available, otherwise ICE + BasisCents
             var centsPerLb = lot.OutrightPrice > 0 ? lot.OutrightPrice : (iceValue + lot.BasisCents);

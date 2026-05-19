@@ -1,6 +1,6 @@
 # Cotton Broker Automation System (CBAS)
 
-Hệ thống Tự động Xử lý Offer Bông - Version 1.5
+Hệ thống Tự động Xử lý Offer Bông - Version 1.5.1
 
 ## Tổng quan
 
@@ -132,8 +132,8 @@ Giá có Commission = Giá (c/kg) - Commission
 - Filter theo shipper, ngày
 - **Xoá offer**: nút xoá với xác nhận, cascade xoá OfferLots + ProcessedOutputs, gỡ liên kết Lot
 
-### Lots (`/lots`) — Quản lý Lot nâng cao (v1.4)
-- **20 cột**: Lot Code, Shipper, Origin, CropYear, Type/Spec, Shipment/ETA, QTY Orig, QTY Avail, Mic, Len, GPT, Basis, Giá c/kg, +Comm, Net, Status, HVI, Action
+### Lots (`/lots`) — Quản lý Lot nâng cao (v1.5.1)
+- **24 cột**: #, Lot Code, Shipper, Origin, Crop, Type/Spec, Shipment, Orig, Avail, **Color**, **Leaf**, **Staple**, Mic, GPT, **Fixed**, Basis, c/kg, +Comm, Net, Status, HVI, Action
 - **ICE + Commission** inputs ở góc trên — thay đổi → giá realtime refresh
 - **Multi-select** + nút "Tạo Output Chào Hàng" → export Excel (nhóm theo Shipment Date)
 - **HVI detail modal**: click "HVI ✓" → xem/chỉnh Mic, Length, Str, Uniformity, Color, Leaf
@@ -143,7 +143,7 @@ Giá có Commission = Giá (c/kg) - Commission
 - Thay đổi status: Reserve, Sold, Reopen
 - **So sánh PDF ↔ Lots**: chọn Offer → hiển thị raw PDF text bên trái, bảng lots bên phải, click lot → highlight chính xác dòng gốc trong PDF
 - Auto-sync: khi upload Offer mới, **mỗi OfferLot tạo 1 Lot riêng** (1:1, không merge trùng LotCode)
-- Auto-create HVIReport từ spec data (Mic/Len/GPT) khi parse Offer
+- Auto-create HVIReport từ spec data (Color/Leaf/Staple/Mic/GPT) khi parse Offer
 
 ## Cấu trúc Database
 
@@ -273,7 +273,7 @@ Hệ thống sử dụng **Strategy Pattern** (`IShipperParser`) để parse PDF
 | Parser | File | CanParse trigger | Đặc điểm |
 |--------|------|------------------|----------|
 | **ToyoshimaParser** | `Services/Parsers/ToyoshimaParser.cs` | Filename chứa "Toyoshima" / "Offer_FE", hoặc nội dung chứa "Toyoshima"/"Nishiki" | Origin sections, compressed spec (SM37G5), M/E Recap lots |
-| **OlamParser** | `Services/Parsers/OlamParser.cs` | Filename/content chứa "Olam" | 6 patterns: Afloat, Recap+Avg, US Recap, Named lot, Generic on-call, Fixed+basis |
+| **OlamParser** | `Services/Parsers/OlamParser.cs` | Filename/content chứa "Olam" | 6 patterns: Afloat, Recap+Avg, US Recap, Named lot, Generic on-call, Fixed+basis. Decode `XX-X-XX` → Color-Leaf-Staple |
 | **BrighannParser** | `Services/Parsers/BrighannParser.cs` | Filename/content chứa "Brighann" | CIF format, auto-generate LotCode (AU-SM37-001) |
 
 ### Thêm shipper mới
@@ -289,6 +289,13 @@ Hệ thống sử dụng **Strategy Pattern** (`IShipperParser`) để parse PDF
 - **Brighann**: Auto-gen `{originCode}-{type}{staple}-{seq}` (BR-SM37-001)
 
 ## Lịch sử Version
+
+### v1.5.1 (2026-05-19)
+- **OlamParser: decode Color-Leaf-Staple** từ pattern `XX-X-XX` (ví dụ: `31-3-38` → Color=31, Leaf=3, Staple=38)
+- **Sync Color/Leaf → HVI**: `SyncLotsAsync` giờ copy đầy đủ ColorSpec → HVI.ColorGrade và LeafSpec → HVI.Leaf
+- **Fix HVI LotCode mismatch**: HVI dùng LotCode thực (có suffix khi trùng), lookup HVI bằng MasterLotId
+- **LotList 24 cột**: thêm cột Color, Leaf, Staple, Fixed Price
+- **Dữ liệu đồng bộ**: OfferProcessor log ↔ LotList table giờ hiển thị đúng cùng dữ liệu
 
 ### v1.5.0 (2026-05-14)
 - **Parser priority**: rule-based parser chạy trước AI → deterministic, cùng file luôn ra cùng kết quả
